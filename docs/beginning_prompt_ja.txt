@@ -1,0 +1,257 @@
+あなたはこの研究に関するプログラムを生成します。まずこのプロポーザルを読んでください。
+
+Capstone Proposal（修正版・日本語）
+
+https://chatgpt.com/share/68882592-b868-800d-85fe-4ce1a59a9f32 
+
+問題提起（Problem Statement）
+
+2025年4月11日、CA/Browser ForumはAppleが提案した「Ballot SC-081v3」を採択した。これは、TLS/SSL証明書の有効期間を段階的に短縮する画期的な政策であり、オンライン信頼性を強化し、脅威アクターによる悪用機会を最小化することを目的としている。この変更により、組織は従来の証明書管理体制を見直し、より頻繁かつ自動化された証明書の更新運用へ移行する必要がある（Lu, 2025）。
+
+このスケジュールは2026年3月に有効期間を398日から200日に短縮することから始まり、2027年に100日、2029年には最短47日へと段階的に減少する予定である。これにより、人的作業に依存した証明書更新運用では、有効期限切れによるサービス停止やセキュリティ警告といったリスクが急増することが予想される。
+
+本プロジェクトでは、日本国内の .jp ドメインを対象に、証明書の更新実態をCT（Certificate Transparency）ログを用いて分析する。更新の周期とその規則性を測定し、自動更新が導入されているかどうかを判断する指標を構築する。また、証明書が一時的に失効していた事例も収集し、人間による管理の限界と自動化の必要性をデータに基づいて明示する。
+
+解決策の概要（Overview of the Solution）
+
+CTログAPIやGoogle BigQueryを利用して、.jp ドメインに対して発行された証明書情報（発行日時・有効期限・CA名・ドメイン名など）を数百万件規模で収集・保存・分析する。特に、ドメイン単位での**証明書の発行間隔（not_beforeの差分）**を時系列で分析し、等間隔な自動更新か、間隔が不規則で人間の関与が疑われるかを分類する。土日祝日 vs 平日の更新比率も調査する。
+
+さらに、証明書の有効期限（not_after）を過ぎてから次の証明書が発行されたケースを抽出することで、期限切れによる失効事例の件数と割合を明らかにする。自治体ドメイン（go.jp、lg.jp）、教育機関（ac.jp）、企業（co.jp）など、組織種別ごとの傾向や、CAごとの運用ポリシーの違いにも着目する。
+
+結果として、証明書運用の自動化の導入状況を可視化し、47日ルールの時代に向けて、特に人的作業が残る領域への改善提言を行う。
+
+学習目標（Specific Learning Objectives）
+
+このプロジェクトを通じて、以下の**MSIT Program Learning Outcomes（PLOs）およびCourse Learning Outcomes（CLOs）**を達成する：
+
+PLO 1 / CLO 1
+
+証明書の有効期限が短縮されたことに起因する新たな運用課題（失効リスクの増加、更新頻度の上昇、人的負荷）をITの知識で分析し、CTログを活用して構造的に問題を定義する。
+
+PLO 2 / CLO 2・3
+
+クラウドベースのCTログデータと分析ツール（BigQuery、Pythonなど）を用いて、更新間隔や失効の傾向を定量的に評価する手法を設計・実装・検証する。
+
+PLO 3 / CLO 3
+
+自治体・教育機関・企業など多様なユーザー種別における更新体制の差異を把握し、それぞれの組織ニーズに適した改善提案を行う。
+
+PLO 4 / CLO 5
+
+更新遅延によって生じるセキュリティ事故やサービス停止の可能性を倫理的な観点で評価し、リスク回避の観点から自動化の必要性を論じる。
+
+
+---
+あなたはこのようなpythonプログラムを作って下さい.
+目標は、証明書の発行情報が記録されているct logの情報を保存することです. ctログはデータ量が多すぎるため、複数のサーバでスクリプトを実行してctログを収集します.
+
+必要なもの
+1. 全体の収集状況を管理するデータベースとAPI(manager api)
+2. 全体の収集状況を表示するUI(manager UI)
+3. 実際に収集を実行するworker nodeで実行されるスクリプト. (worker script)
+
+
+# file structure
+srcフォルダの中にmanager api, manager ui, worker script はそれぞれ異なるフォルダにファイルを持つ。共通したコンポーネントはsrc/shareに置く。
+
+# manager api/UI
+FastAPIで記述する. mysqlを利用する。
+
+
+## 収集対象 ct log endpoints
+https://ct.googleapis.com/logs/argon2022/
+https://ct.googleapis.com/logs/argon2023/
+https://ct.googleapis.com/logs/us1/argon2024/
+https://ct.googleapis.com/logs/us1/argon2025h1/
+https://ct.googleapis.com/logs/us1/argon2025h2/
+https://ct.googleapis.com/logs/us1/argon2026h1/
+https://ct.googleapis.com/logs/us1/argon2026h2/
+https://ct.googleapis.com/logs/xenon2022/
+https://ct.googleapis.com/logs/xenon2023/
+https://ct.googleapis.com/logs/eu1/xenon2024/
+https://ct.googleapis.com/logs/eu1/xenon2025h1/
+https://ct.googleapis.com/logs/eu1/xenon2025h2/
+https://ct.googleapis.com/logs/eu1/xenon2026h1/
+https://ct.googleapis.com/logs/eu1/xenon2026h2/
+https://ct.googleapis.com/logs/eu1/xenon2027h1/
+
+## endpoints
+1. worker nodeに指示を出すAPI
+request paramはない。未収集のct logのURLとstart/end paramを返却する。
+収集を完了したとみなすstart/endも返却する。大体10万件ほどで一度の収集は完了したとみなす。
+ctlogのデータ量が多すぎるため、12月〜1月にフォーカスして収集する。start=0から始めると大体12月がnot_beforeのものから始まるので、このまま採用する。各ct log endpointの /ct/v1/get-sth にアクセスし、tree_sizeの量に対する比率からendの限界値が 1/31 になるように推測する。完璧な推測は不可能なので2月分を収集してしまう誤差は許容する。
+複数のworker nodesに同じ範囲の収集を指示しない。
+workerに指示した内容をdatabaseに記録する。その内容は "4. worker nodeのping api"によりupdateされていく。worker nodeが死亡した場合、その指示内容はresume待ちになる。resume待ちがある場合は、その内容は次にworker nodeからリクエストがあったとき、指示内容として利用される。
+
+
+
+2. worker nodeが取得した証明書データをアップロードしてくるAPI
+request bodyは配列を受け取る。その内容は "ct logのleaf_inputの値そのもの" と "そのlogを取得したときのct log url", "log name(e.g. argon2022, xenon2025h2)", "友人の名前" を含json辞書。
+leaf_input値をそのままfileとして保存する。ct log urlからfile名を生成する。
+leaf_input値をparseしてdatabaseに保存する。このとき、log name, 友人名もカラムとして保存する。
+issuer, not_before, not_after, serial number, common nameなど10以上のカラムで全て同じdataがある場合は重複として登録はしない。serial numberはCAごとに重複がありえることに注意すること。
+その日に収集した証明書数を統計用のdatabase table にlog nameごとにincrementして保存していく。
+
+3. 収集状況を可視化するAPIとUI
+それぞれのログ、エンドポイントの収集状況をレスポンスとして返す
+all log namesのtotal count, log nameごとのtotal count, そしてlog nameごとに1日ごとのcountを返す
+どのworkerがどの友人で、今起動中なのか、どれくらい収集したのかを表示する。
+
+4. worker nodeのping api
+  1. worker nodeには現在収集中の情報をpingしてもらう.これによりworker nodeの生存を確認する。manager apiに指示された情報と、現在の収集状況をrequest paramで受け取る。
+  2. "1. worker nodeに指示を出すAPI" が記録済みの指示内容を更新していく。(e.g. update status)
+  3. worker nodeが死亡したとみなされる場合
+    1. 一定時間 ping がなければそのworker nodeは切断されたとみなす。
+    2. 収集を指示したレンジを、最後に収集が確認できた end 値 + 1 を start値にして、他のworker nodeに指示(resume)できる状態にする
+    3. 切断されたかどうかは、api serverが能動的に判断しなければならない。なんらかの仕組みで判断するようにすること。
+
+6. termination api
+worker nodeのprogramがctrl+c やdocker containerの終了などでworkerが能動的にprogramを終了する場合は、termination apiにresumeが必要であることを登録してから終了する
+
+
+## mysql
+### connection
+host="127.0.0.1:3306"
+user="root"
+password=NULL
+database="ct"
+
+### table/parser
+証明書のparse結果テーブルは以下のファイルなど、今このproject内にあるファイルを参考にして作る。ct log name, 友人名など不足しているカラムは追加すること。これらのファイルは別プロジェクトから取得したもののため、書き換えても良い。
+database.py
+jp_parser.py
+
+
+
+# worker script
+1. scriptを起動すると、manager apiから収集するべきct logのURLとstart/end paramを取得する
+2. start/end paramを32ずつ増加させながら収集し続ける
+3. leaf_inputの値をparseして、.jp domainの証明書の場合のみ、処理を追加
+4. 取得した .jp domainのleaf_inputのみをmanager apiにuploadする。複数のleaf_inputが同時に見つかった場合に備えて、必ず配列として複数まとめてuploadする。
+5. uploadに失敗した場合は、local fileとメモリにrequest内容を保存しておく。10分おきに再送信をリトライし続ける。再送信する際には、過去の失敗リクエストをまとめて送信しない。失敗した単位ごとにリトライをする。リトライが成功し場合はそのlocal fileとメモリから削除し、リトライ対象から除外すること。
+5. manager apiに指定されたレンジの収集が完了すると、step 1に戻り、新たな収集を始める。前回収集分のリトライが残っている場合は、引き続きリトライをし続ける。
+6. ctrl+c やdocker containerの終了などでworkerが能動的にprogramを終了する場合は、termination apiにresumeが必要であることを登録してから終了する
+
+
+
+## detail
+以下のファイルなど、今このproject内にあるファイルを参考にして作る。不足しているカラムは追加すること。これらのファイルは別プロジェクトから取得したもののため、書き換えても良い。
+collector_core.py
+async_jp_fetcher.py
+progress_display.py
+
+class CtLogCollecterにct_log_url, batch_size, 収集完了サイズ, proxiesを渡すことで収集を実行する。worker nodeにはdatabaseは不要なので、いらないコードは削除して良い。
+
+
+## notes
+worker nodeはITエンジニア友人のPCになるため、できるだけlogを少なくしてdisk容量を使わないようにする。進捗状況が10秒おきくらいに表示されればいい。
+例えばこのような情報だ。
+🌐 Req: 574,476 | 📁 Uploaded: 72310 | 🇯🇵 JP: 72310 (0.504%) | 📍 Index: 33,287,774 | ⏱️ ETA: 34h 37m
+
+
+## script start command
+基本的には python worker.py だけで実行する。optionで複数のproxyを追加できるようにする。
+Docker-composeでもoptionを指定して起動できるようにすること。
+docker runでも起動できるようにすること。docker-hubへのimage登録は私が行う。
+友人の任意の名前を入れられるようにする。これはmanager apiが、どのworkerがどの友人なのかを判別するために使う
+友人向けのsetup guideを用意すること。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--------
+worker, managerの動作を大きく変えます. 現在は、Googleのログだけを取得することになっています。 新たに4つのエンドポイントから同時に取得することにします。これはそれぞれのエンドポイントにrate limitが設定されているため、異なるrate limitのサーバに対して並行してrequestをするためです。対象endpointは以下の４カテゴリに分かれます。
+workerは、起動時に4カテゴリそれぞれの指示を受け取ります。それぞれのカテゴリに対して進捗を表示します。manager apiは、４つの指示を同時に出すようにします。
+
+
+# cloudflare
+https://ct.cloudflare.com/logs/nimbus2022/ct/v1/get-sth
+https://ct.cloudflare.com/logs/nimbus2023/ct/v1/get-sth
+https://ct.cloudflare.com/logs/nimbus2024/ct/v1/get-sth
+https://ct.cloudflare.com/logs/nimbus2025/ct/v1/get-sth
+https://ct.cloudflare.com/logs/nimbus2026/ct/v1/get-sth
+
+# google
+https://ct.googleapis.com/logs/argon2022/ct/v1/get-sth
+https://ct.googleapis.com/logs/argon2023/ct/v1/get-sth
+https://ct.googleapis.com/logs/eu1/xenon2024/ct/v1/get-sth
+https://ct.googleapis.com/logs/eu1/xenon2025h1/ct/v1/get-sth
+https://ct.googleapis.com/logs/eu1/xenon2025h2/ct/v1/get-sth
+https://ct.googleapis.com/logs/eu1/xenon2026h1/ct/v1/get-sth
+https://ct.googleapis.com/logs/eu1/xenon2026h2/ct/v1/get-sth
+https://ct.googleapis.com/logs/us1/argon2024/ct/v1/get-sth
+https://ct.googleapis.com/logs/us1/argon2025h1/ct/v1/get-sth
+https://ct.googleapis.com/logs/us1/argon2025h2/ct/v1/get-sth
+https://ct.googleapis.com/logs/us1/argon2026h1/ct/v1/get-sth
+https://ct.googleapis.com/logs/us1/argon2026h2/ct/v1/get-sth
+https://ct.googleapis.com/logs/xenon2022/ct/v1/get-sth
+https://ct.googleapis.com/logs/xenon2023/ct/v1/get-sth
+
+
+# trustasia
+https://ct2024.trustasia.com/log2024/ct/v1/get-sth
+https://ct2025-a.trustasia.com/log2025a/ct/v1/get-sth
+https://ct2025-b.trustasia.com/log2025b/ct/v1/get-sth
+https://ct2026-a.trustasia.com/log2026a/ct/v1/get-sth
+https://ct2026-b.trustasia.com/log2026b/ct/v1/get-sth
+
+# digicert
+https://nessie2022.ct.digicert.com/log/ct/v1/get-sth
+https://nessie2023.ct.digicert.com/log/ct/v1/get-sth
+https://nessie2024.ct.digicert.com/log/ct/v1/get-sth
+https://nessie2025.ct.digicert.com/log/ct/v1/get-sth
+https://sphinx.ct.digicert.com/2024h1/ct/v1/get-sth
+https://sphinx.ct.digicert.com/2024h2/ct/v1/get-sth
+https://sphinx.ct.digicert.com/2025h1/ct/v1/get-sth
+https://sphinx.ct.digicert.com/2025h2/ct/v1/get-sth
+https://sphinx.ct.digicert.com/2026h1/ct/v1/get-sth
+https://sphinx.ct.digicert.com/2026h2/ct/v1/get-sth
+https://wyvern.ct.digicert.com/2024h1/ct/v1/get-sth
+https://wyvern.ct.digicert.com/2024h2/ct/v1/get-sth
+https://wyvern.ct.digicert.com/2025h1/ct/v1/get-sth
+https://wyvern.ct.digicert.com/2025h2/ct/v1/get-sth
+https://wyvern.ct.digicert.com/2026h1/ct/v1/get-sth
+https://wyvern.ct.digicert.com/2026h2/ct/v1/get-sth
+https://yeti2022-2.ct.digicert.com/log/ct/v1/get-sth
+https://yeti2022.ct.digicert.com/log/ct/v1/get-sth
+https://yeti2023.ct.digicert.com/log/ct/v1/get-sth
+https://yeti2024.ct.digicert.com/log/ct/v1/get-sth
+https://yeti2025.ct.digicert.com/log/ct/v1/get-sth
+
+
+
+

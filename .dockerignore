@@ -1,0 +1,13 @@
+# Git related
+.git
+.gitignore
+
+# Local settings and logs
+*.log
+*.env
+tmp/
+build/
+
+# Python cache
+__pycache__/
+*.pyc

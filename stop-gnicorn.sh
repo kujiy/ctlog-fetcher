@@ -1,0 +1,2 @@
+pkill -TERM -f gunicorn
+

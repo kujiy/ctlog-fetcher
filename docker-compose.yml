@@ -1,0 +1,10 @@
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    image: ct-worker:latest
+    environment:
+      - PYTHONPATH=/app
+    volumes:
+        - ./src/worker/worker.py:/app/src/worker/worker.py

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Fetched Certificates - CT Log Dashboard</title>
+    <!-- Favicon -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/images/favicon_io/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/images/favicon_io/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/assets/images/favicon_io/favicon-16x16.png">
+    <link rel="manifest" href="/assets/images/favicon_io/site.webmanifest">
+    <link rel="shortcut icon" href="/assets/images/favicon_io/favicon.ico">
+    <style>
+        body { font-family: sans-serif; margin: 2em; }
+        h1 { color: #2c3e50; }
+        .nav-links { margin-bottom: 2em; }
+        .nav-links a { margin-right: 1em; text-decoration: none; color: #3498db; }
+        .nav-links a:hover { text-decoration: underline; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 2em; }
+        th, td { border: 1px solid #ccc; padding: 0.5em; text-align: left; }
+        th { background: #f4f4f4; }
+        .error { color: red; }
+        .sample-note {
+            background-color: #e8f4fd;
+            border: 1px solid #bee5eb;
+            border-radius: 4px;
+            padding: 1em;
+            margin-bottom: 2em;
+            color: #0c5460;
+        }
+        .cert-id { font-weight: bold; color: #2c3e50; }
+        .cert-fingerprint { font-family: monospace; font-size: 0.9em; }
+        .cert-dates { font-size: 0.9em; }
+        .wildcard-cert { color: #e67e22; }
+        .vetting-level {
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+        .vetting-dv { background-color: #d4edda; color: #155724; }
+        .vetting-ov { background-color: #fff3cd; color: #856404; }
+        .vetting-ev { background-color: #cce5ff; color: #004085; }
+    </style>
+</head>
+<body>
+    <div class="nav-links">
+        <a href="/">← Back to Dashboard</a>
+        <a href="https://chikkuchiku.atlassian.net/wiki/external/YTIwZmYzMTFjODEzNDA3NjlmYWQxMThjNWY3ZDhmMDI">📖 あなたも研究に参加できます！</a>
+    </div>
+
+    <h1>🔒 Fetched Certificates by Worker: {{ worker_name }}</h1>
+
+    <div class="sample-note">
+        <strong>📋 Worker証明書表示について:</strong><br>
+        このページでは、{{ worker_name }}によって取得されたcertsテーブルからidの降順で最新100件の証明書をサンプルとして表示しています。
+        実際のデータベースには更に多くの証明書が格納されている可能性があります。
+    </div>
+
+    {% if error_message %}
+        <div class="error">
+            <strong>⚠️ エラー:</strong> {{ error_message }}
+        </div>
+    {% elif fetched_certs_data %}
+        <section>
+            <h2>証明書一覧 (最新 {{ fetched_certs_data.count }} 件)</h2>
+
+            {% if fetched_certs_data.certs %}
+                <div style="overflow-x: auto;">
+                    <table>
+                        <tr>
+                            <th>ID</th>
+                            <th>Common Name</th>
+                            <th>Issuer</th>
+                            <th>Serial Number</th>
+                            <th>Not Before</th>
+                            <th>Not After</th>
+                            <th>Subject Alternative Names</th>
+                            <th>Certificate Fingerprint (SHA256)</th>
+                            <th>Subject Public Key Hash</th>
+                            <th>Public Key Algorithm</th>
+                            <th>Key Size</th>
+                            <th>Signature Algorithm</th>
+                            <th>CT Log Timestamp</th>
+                            <th>CRL URLs</th>
+                            <th>OCSP URLs</th>
+                            <th>Vetting Level</th>
+                            <th>SAN Count</th>
+                            <th>Issued on Weekend</th>
+                            <th>Issued at Night</th>
+                            <th>Organization Type</th>
+                            <th>Is Wildcard</th>
+                            <th>Root CA Issuer Name</th>
+                            <th>Is Precertificate</th>
+                            <th>Log Name</th>
+                            <th>CT Index</th>
+                            <th>CT Log URL</th>
+                            <th>Worker Name</th>
+                            <th>Created At</th>
+                            <th>CT Entry</th>
+                        </tr>
+                        {% for cert in fetched_certs_data.certs %}
+                        <tr>
+                            <td class="cert-id">{{ cert.id }}</td>
+                            <td>
+                                {% if cert.is_wildcard %}
+                                    <span class="wildcard-cert">🌟 {{ cert.common_name }}</span>
+                                {% else %}
+                                    {{ cert.common_name }}
+                                {% endif %}
+                            </td>
+                            <td>{{ cert.issuer if cert.issuer else '-' }}</td>
+                            <td>{{ cert.serial_number if cert.serial_number else '-' }}</td>
+                            <td class="cert-dates">{{ cert.not_before[:16] if cert.not_before else '-' }}</td>
+                            <td class="cert-dates">{{ cert.not_after[:16] if cert.not_after else '-' }}</td>
+                            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;">
+                                {{ cert.subject_alternative_names if cert.subject_alternative_names else '-' }}
+                            </td>
+                            <td class="cert-fingerprint">
+                                {% if cert.certificate_fingerprint_sha256 %}
+                                    {{ cert.certificate_fingerprint_sha256[:16] }}...
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td class="cert-fingerprint">
+                                {% if cert.subject_public_key_hash %}
+                                    {{ cert.subject_public_key_hash[:16] }}...
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>{{ cert.public_key_algorithm if cert.public_key_algorithm else '-' }}</td>
+                            <td>{{ cert.key_size if cert.key_size is not none else '-' }}</td>
+                            <td>{{ cert.signature_algorithm if cert.signature_algorithm else '-' }}</td>
+                            <td>{{ cert.ct_log_timestamp if cert.ct_log_timestamp else '-' }}</td>
+                            <td style="max-width: 150px; overflow: hidden; text-overflow: ellipsis;">
+                                {{ cert.crl_urls if cert.crl_urls else '-' }}
+                            </td>
+                            <td style="max-width: 150px; overflow: hidden; text-overflow: ellipsis;">
+                                {{ cert.ocsp_urls if cert.ocsp_urls else '-' }}
+                            </td>
+                            <td>
+                                {% if cert.vetting_level %}
+                                    <span class="vetting-level vetting-{{ cert.vetting_level }}">{{ cert.vetting_level.upper() }}</span>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>{{ cert.san_count if cert.san_count is not none else '-' }}</td>
+                            <td>
+                                {% if cert.issued_on_weekend is not none %}
+                                    {% if cert.issued_on_weekend %}✅{% else %}❌{% endif %}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if cert.issued_at_night is not none %}
+                                    {% if cert.issued_at_night %}🌃{% else %}☀️{% endif %}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>{{ cert.organization_type if cert.organization_type else '-' }}</td>
+                            <td>
+                                {% if cert.is_wildcard is not none %}
+                                    {% if cert.is_wildcard %}🌟{% else %}-{% endif %}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>{{ cert.root_ca_issuer_name if cert.root_ca_issuer_name else '-' }}</td>
+                            <td>
+                                {% if cert.is_precertificate is not none %}
+                                    {% if cert.is_precertificate %}✅{% else %}❌{% endif %}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>{{ cert.log_name if cert.log_name else '-' }}</td>
+                            <td>{{ cert.ct_index if cert.ct_index is not none else '-' }}</td>
+                            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;">
+                                {{ cert.ct_log_url if cert.ct_log_url else '-' }}
+                            </td>
+                            <td>{{ cert.worker_name if cert.worker_name else '-' }}</td>
+                            <td class="cert-dates">{{ cert.created_at[:19] if cert.created_at else '-' }}</td>
+                            <td style="max-width: 100px; overflow: hidden; text-overflow: ellipsis;">
+                                {% if cert.ct_entry %}
+                                    {{ cert.ct_entry[:50] }}...
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                </div>
+            {% else %}
+                <p>証明書データが見つかりませんでした。</p>
+            {% endif %}
+        </section>
+    {% else %}
+        <p>データを読み込み中...</p>
+    {% endif %}
+
+    <div class="nav-links">
+        <a href="/">← Back to Dashboard</a>
+    </div>
+</body>
+</html>

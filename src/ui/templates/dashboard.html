@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CT Log Fetcher - Dashboard</title>
+    <!-- Favicon -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/images/favicon_io/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/images/favicon_io/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/assets/images/favicon_io/favicon-16x16.png">
+    <link rel="manifest" href="/assets/images/favicon_io/site.webmanifest">
+    <link rel="shortcut icon" href="/assets/images/favicon_io/favicon.ico">
+    <style>
+        body { font-family: sans-serif; margin: 2em; }
+        h1 { color: #2c3e50; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 2em; }
+        th, td { border: 1px solid #ccc; padding: 0.5em; text-align: left; }
+        th { background: #f4f4f4; }
+        .progress-bar { background: #e0e0e0; border-radius: 4px; overflow: hidden; height: 1em; }
+        .progress { background: #3498db; height: 100%; }
+        .status-running { color: green; }
+        .status-resume_wait { color: orange; }
+        .status-finished { color: gray; }
+        .highlight-green { background-color: #d4edda; }
+        .error { color: red; }
+        .nav-links a { margin-right: 1em; text-decoration: none; color: #3498db; }
+    </style>
+</head>
+<body>
+    <h1>🔍 CT Log Fetcher 📄 Dashboard</h1>
+
+    <div class="nav-links" style="margin-bottom: 2em;">
+        <a href="/">🏠 Dashboard</a>
+        <a href="https://chikkuchiku.atlassian.net/wiki/external/YTIwZmYzMTFjODEzNDA3NjlmYWQxMThjNWY3ZDhmMDI">📖 研究に参加できます！</a>
+        <a href="/unique_certs">🔒 Sample Certificates</a>
+    </div>
+
+    <section>
+        <!-- Summary Section 数字は３桁ごとにカンマをつけて表示-->
+        <b>Cumulative Fetched Certs:</b> {{ "{:,}".format(summary.total) }} |
+        <b>Cumulative Worker Names</b> {{ summary.cumulative_worker_names }} |
+        <b>Active Workers:</b> {{ "{:,}".format(summary.workers) }} &nbsp;|
+        <b>Updated: </b> {{ summary.last_updated }}
+        <div style="margin-top: 0.5em; margin-bottom: 0.5em; padding: 0.5em; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 4px;">
+            <b>😃 お知らせ (2025-09-01 14:03)</b> Docker image を更新してください 😃<br>
+            <code>docker.io/kujiy/ct-worker:20250831-140949</code>
+        </div>
+        {% if summary.error %}
+            <span class="error">⚠️ {{ summary.error }}</span>
+        {% endif %}
+        {% if summary.logs_progress_error %}
+            <span class="error">⚠️ logs_progress API error: {{ summary.logs_progress_error }}</span>
+        {% endif %}
+        {% if summary.workers_status_error %}
+            <span class="error">⚠️ workers_status API error: {{ summary.workers_status_error }}</span>
+        {% endif %}
+        {% if summary.worker_ranking_error %}
+            <span class="error">⚠️ worker_ranking API error: {{ summary.worker_ranking_error }}</span>
+        {% endif %}
+        {% if summary.logs_summary_error %}
+            <span class="error">⚠️ logs_summary API error: {{ summary.logs_summary_error }}</span>
+        {% endif %}
+    </section>
+
+    <h2>Worker Ranking</h2>
+    <div id="worker-ranking">
+        {% if worker_ranking %}
+        <table>
+            <tr><th colspan="5">Committed Index Ranking</th></tr>
+            <tr>
+                <th>Rank</th>
+                <th>Worker Name</th>
+                <th>Fetched Cert Count</th>
+                <th>.jp Count</th>
+                <th>.jp Ratio</th></tr>
+            {% for r in worker_ranking.worker_total_count_ranking %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ r.worker_name }}</td>
+                <td>{{ "{:,}".format(r.worker_total_count) }}</td>
+                <td>
+                    {% if r.jp_count is defined and r.jp_count > 0 %}
+                        <a href="/fetched-certs/{{ r.worker_name.split(' ')[-1] }}" style="text-decoration: none; color: #3498db;">{{ "{:,}".format(r.jp_count) }}</a>
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td>{% if r.committed_index is defined and r.committed_index > 0 %}{{ '%.2f' % (r.jp_ratio * 100) }}%{% elif r.jp_ratio is defined %}{{ '%.2f' % (r.jp_ratio * 100) }}%{% else %}-{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        <table>
+{#            <tr><th colspan="4">.jp Domain Count Ranking</th></tr>#}
+{#            <tr><th>Rank</th><th>Worker Name</th><th>.jp Count</th><th>.jp Ratio</th></tr>#}
+{#            {% for r in worker_ranking.jp_count_ranking %}#}
+{#            <tr>#}
+{#                <td>{{ loop.index }}</td>#}
+{#                <td>{{ r.worker_name }}</td>#}
+{#                <td>#}
+{#                    <a href="/fetched-certs/{{ r.worker_name.split(' ')[-1] }}" style="text-decoration: none; color: #3498db;">{{ "{:,}".format(r.jp_count) }}</a>#}
+{#                </td>#}
+{#                <td>{% if r.committed_index is defined and r.committed_index > 0 %}{{ '%.2f' % (r.jp_ratio * 100) }}%{% elif r.jp_ratio is defined %}{{ '%.2f' % (r.jp_ratio * 100) }}%{% else %}-{% endif %}</td>#}
+{#            </tr>#}
+{#            {% endfor %}#}
+        </table>
+        {% else %}
+        <p>ランキング情報を取得できませんでした。</p>
+        {% endif %}
+    </div>
+
+
+
+    {% if logs_summary %}
+    <section style="margin-bottom:2em;">
+        <h2>Overall Progress</h2>
+        <table>
+            <tr>
+                <th>Total Tree Size</th>
+                <th>Fetched Tree Size</th>
+                <th>ETA (days)</th>
+                <th>Total .jp Count</th>
+                <th>Total .jp Ratio</th>
+                <th>Unique .jp Count</th>
+                <th>Unique .jp Ratio</th>
+                <th>Progress</th>
+            </tr>
+            <tr>
+                <td>{{ "{:,}".format(logs_summary.total_tree_size) }}</td>
+                <td>{{ "{:,}".format(logs_summary.fetched_tree_size) }}</td>
+                <td>{% if logs_summary.eta_days is not none %}{{ logs_summary.eta_days }}{% else %}-{% endif %}</td>
+                <td>{{ logs_summary.total_jp }}</td>
+                <td>{{ '%.2f' % (logs_summary.jp_ratio * 100) }}%</td>
+                <td class="highlight-green">
+                    <a href="/unique_certs" style="text-decoration: none; color: #3498db; margin-right: 1em;">{{ logs_summary.unique_jp_count }}</a>
+                </td>
+                <td>{{ '%.2f' % (logs_summary.unique_jp_ratio * 100) }}%</td>
+                <td>
+                    {% set percent = logs_summary.fetched_rate * 100 %}
+                    <div class="progress-bar"><div class="progress" style="width: {{ percent|int }}%"></div></div>
+                    {{ logs_summary.fetched_tree_size }} / {{ logs_summary.total_tree_size }} ({{ '%.2f' % percent }}%)
+                </td>
+            </tr>
+        </table>
+    </section>
+    {% endif %}
+
+
+
+    <h2>Progress by Log</h2>
+    {% for cat, cat_logs in logs_by_cat.items() %}
+    <h3>{{ cat|capitalize }}</h3>
+    <table>
+    <tr><th>Log Name</th><th>Tree Size</th><th>Fetched</th><th>.jp Count</th><th>.jp Ratio</th><th>Progress</th></tr>
+        {% for log in cat_logs %}
+        <tr>
+            <td>{{ log.log_name }}</td>
+            <td>{% if log.tree_size is not none %}{{ "{:,}".format(log.tree_size) }}{% else %}-{% endif %}</td>
+            <td>{{ "{:,}".format(log.total_fetched) }}</td>
+            <td>{{ log.jp_count }}</td>
+            <td>{% if log.total_fetched > 0 %}{{ '%.2f' % (log.jp_count / log.total_fetched * 100) }}%{% else %}-{% endif %}</td>
+            <td>
+                {% set percent = (log.total_fetched / log.tree_size * 100) if log.tree_size else 0 %}
+                <div class="progress-bar"><div class="progress" style="width: {{ percent|int }}%"></div></div>
+                {{ log.total_fetched }} / {{ log.tree_size if log.tree_size is not none else '-' }} ({{ '%.2f' % percent }}%)
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endfor %}
+
+
+
+    <h2>Status by Worker</h2>
+    <table>
+        <tr>
+            <th>Worker Name</th>
+            <th>Log Name</th>
+            <th>Start</th>
+            <th>End</th>
+            <th>Current Index</th>
+            <th>Last Uploaded Index</th>
+            <th>Fetched Count</th>
+            <th>.jp Count</th>
+            <th>.jp Ratio</th>
+            <th>Progress</th>
+            <th>Last Ping</th>
+            <th>Status</th>
+        </tr>
+        {% for w in workers %}
+        <tr>
+            <td>{{ w.worker_name }}</td>
+            <td>{{ w.log_name }}</td>
+            <td>{{ w.start }}</td>
+            <td>{{ w.end }}</td>
+            <td>{{ w.current }}</td>
+            <td>{{ w.last_uploaded_index if w.last_uploaded_index is not none else '' }}</td>
+            <td>{{ w.worker_fetched_count }}</td>
+            <td>
+                {% set log = (logs | selectattr('log_name', 'equalto', w.log_name) | list | first) %}
+                {{ log.jp_count if log else '' }}
+            </td>
+            <td>
+                {% if log %}{{ '%.2f' % (log.jp_ratio * 100) }}%{% endif %}
+            </td>
+            <td>
+                <div class="progress-bar"><div class="progress" style="width: {{ (w.progress * 100)|int }}%"></div></div>
+                {{ w.worker_fetched_count }}/{{ (w.end - w.start + 1) if w.end is not none and w.start is not none else '-' }} ({{ (w.progress * 100)|int }}%)
+            </td>
+            <td>{% if w.last_ping %}{{ w.last_ping.strftime('%Y-%m-%d %H:%M:%S') }}{% else %}{% endif %}</td>
+            <td class="status-{{ w.status }}">{{ w.status }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+
+    <h2>API Round Trip Time</h2>
+    <table>
+        <thead>
+            <th>API</th>
+            <th>RTT (ms)</th>
+        </thead>
+        <tbody>
+            {% for r in round_trip_time %}
+            <tr>
+                <td>{{ r.api_name }}</td>
+                <td>{{ '%.2f' % r.rtt if r.rtt else "-" }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>

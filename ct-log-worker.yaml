@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ct-log-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ct-log-worker
+  template:
+    metadata:
+      labels:
+        app: ct-log-worker
+    spec:
+      containers:
+      - name: worker
+        image: docker.io/kujiy/ct-worker:20250831-140949
+        env:
+        - name: WORKER_NAME
+          value: "your-public-name"

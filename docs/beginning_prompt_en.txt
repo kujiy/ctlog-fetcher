@@ -1,0 +1,193 @@
+You will generate programs related to this research. Please first read this proposal.
+
+Capstone Proposal (Revised, English Translation)
+
+https://chatgpt.com/share/68882592-b868-800d-85fe-4ce1a59a9f32 
+
+Problem Statement
+
+On April 11, 2025, the CA/Browser Forum adopted "Ballot SC-081v3" proposed by Apple. This is a groundbreaking policy to gradually shorten the validity period of TLS/SSL certificates, aiming to strengthen online reliability and minimize opportunities for abuse by threat actors. Due to this change, organizations must review their traditional certificate management systems and shift to more frequent and automated certificate renewal operations (Lu, 2025).
+
+This schedule starts in March 2026 by shortening the validity period from 398 days to 200 days, then to 100 days in 2027, and finally to a minimum of 47 days in 2029. As a result, certificate renewal operations that rely on manual work are expected to face a sharp increase in risks such as service outages and security warnings due to expired certificates.
+
+This project analyzes the actual state of certificate renewal for .jp domains in Japan using CT (Certificate Transparency) logs. It measures the renewal cycle and its regularity, constructs indicators to determine whether automation has been introduced, and collects cases where certificates were temporarily expired to clarify the limits of human management and the necessity of automation based on data.
+
+Overview of the Solution
+
+Using CT log APIs and Google BigQuery, we will collect, store, and analyze millions of certificate records (issue date, expiration date, CA name, domain name, etc.) issued for .jp domains. In particular, we will analyze the **interval between certificate issuances (difference in not_before)** for each domain over time, and classify whether the renewals are automated (regular intervals) or likely involve human intervention (irregular intervals). We will also investigate the ratio of renewals on weekends/holidays vs. weekdays.
+
+Furthermore, by extracting cases where the next certificate was issued after the previous one expired (not_after), we will clarify the number and proportion of expiration incidents. We will focus on trends by organization type (government domains: go.jp, lg.jp; educational institutions: ac.jp; companies: co.jp) and differences in operational policies by CA.
+
+As a result, we will visualize the status of certificate operation automation and make recommendations for improvement, especially in areas where manual work remains, in preparation for the era of the 47-day rule.
+
+Specific Learning Objectives
+
+Through this project, the following **MSIT Program Learning Outcomes (PLOs) and Course Learning Outcomes (CLOs)** will be achieved:
+
+PLO 1 / CLO 1
+
+Analyze new operational challenges (increased risk of expiration, increased renewal frequency, human workload) caused by shortened certificate validity using IT knowledge, and structurally define the problem using CT logs.
+
+PLO 2 / CLO 2 & 3
+
+Design, implement, and validate quantitative evaluation methods for renewal intervals and expiration trends using cloud-based CT log data and analysis tools (BigQuery, Python, etc.).
+
+PLO 3 / CLO 3
+
+Understand differences in renewal systems among various user types (government, education, companies) and make improvement proposals tailored to each organization's needs.
+
+PLO 4 / CLO 5
+
+Evaluate the potential for security incidents and service outages caused by renewal delays from an ethical perspective, and discuss the necessity of automation from a risk avoidance standpoint.
+
+---
+Please create a Python program as described above.
+The goal is to save CT log information that records certificate issuance. Since CT logs are too large, scripts will be run on multiple servers to collect CT logs.
+
+Requirements
+1. A database and API (manager api) to manage the overall collection status
+2. A UI (manager UI) to display the overall collection status
+3. A script to be run on worker nodes that actually perform the collection (worker script)
+
+# file structure
+Within the src folder, manager api, manager ui, and worker script each have their own folders. Shared components are placed in src/share.
+
+# manager api/UI
+Written in FastAPI. Uses MySQL.
+
+## Target CT log endpoints
+https://ct.googleapis.com/logs/argon2022/
+https://ct.googleapis.com/logs/argon2023/
+https://ct.googleapis.com/logs/us1/argon2024/
+https://ct.googleapis.com/logs/us1/argon2025h1/
+https://ct.googleapis.com/logs/us1/argon2025h2/
+https://ct.googleapis.com/logs/us1/argon2026h1/
+https://ct.googleapis.com/logs/us1/argon2026h2/
+https://ct.googleapis.com/logs/xenon2022/
+https://ct.googleapis.com/logs/xenon2023/
+https://ct.googleapis.com/logs/eu1/xenon2024/
+https://ct.googleapis.com/logs/eu1/xenon2025h1/
+https://ct.googleapis.com/logs/eu1/xenon2025h2/
+https://ct.googleapis.com/logs/eu1/xenon2026h1/
+https://ct.googleapis.com/logs/eu1/xenon2026h2/
+https://ct.googleapis.com/logs/eu1/xenon2027h1/
+
+## endpoints
+1. API to instruct worker nodes
+No request params. Returns the URL of the uncollected CT log and start/end params.
+Also returns start/end values considered as collection complete (about 100,000 entries per collection).
+Since CT log data is too large, focus on collecting data from December to January. Starting from start=0 usually begins with not_before in December, so use this as is. For each CT log endpoint, access /ct/v1/get-sth and estimate the end limit as 1/31 based on the ratio to tree_size. Perfect estimation is impossible, so allow for some error collecting February data.
+Do not instruct multiple worker nodes to collect the same range.
+Instructions given to workers are recorded in the database and updated by "4. worker node ping api". If a worker node dies, its instruction is set to resume-waiting. If there is a resume-waiting instruction, it is used as the next instruction when a worker node requests instructions.
+2. API for worker nodes to upload collected certificate data
+Request body is an array. Each item is a JSON dict containing "leaf_input" from the CT log, "ct log url" at the time of collection, "log name (e.g. argon2022, xenon2025h2)", and "friend's name".
+Save the leaf_input value as a file. Generate the filename from the ct log url.
+Parse the leaf_input value and save it to the database. At this time, also save log name and friend name as columns.
+If all data matches in more than 10 columns (issuer, not_before, not_after, serial number, common name, etc.), do not register as duplicate. Note that serial numbers may be duplicated per CA.
+The number of certificates collected per day is incremented and saved in a statistics database table by log name.
+3. API and UI to visualize collection status
+Returns the collection status for each log and endpoint as a response.
+Returns total count for all log names, total count per log name, and daily count per log name.
+Displays which worker is which friend, whether it is running, and how much has been collected.
+4. worker node ping api
+  1. Worker nodes ping with current collection info to confirm their liveness. Receives the info instructed by manager api and current collection status as request params.
+  2. Updates the recorded instruction from "1. API to instruct worker nodes" (e.g. update status)
+  3. If a worker node is considered dead:
+    1. If there is no ping for a certain period, the worker node is considered disconnected.
+    2. The collection range instructed is set to resume-waiting, with start value as last confirmed end + 1, so other worker nodes can be instructed (resume).
+    3. The API server must actively determine whether it is disconnected by some mechanism.
+
+6. termination api
+When a worker node program is intentionally terminated (ctrl+c, docker container stop, etc.), it must register that resume is needed with the termination api before exiting.
+
+## mysql
+### connection
+host="127.0.0.1:3306"
+user="root"
+password=NULL
+database="ct"
+
+### table/parser
+Refer to files such as database.py and jp_parser.py in this project for the certificate parse result table. Add missing columns such as ct log name and friend name. These files were obtained from another project, so you may modify them.
+
+# worker script
+1. When the script starts, it obtains the CT log URL and start/end params to collect from the manager api.
+2. Continues collecting, increasing start/end params by 32 each time.
+3. Parses leaf_input values and adds processing only for certificates for .jp domains.
+4. Uploads only .jp domain leaf_inputs to the manager api. Always upload as an array in case multiple leaf_inputs are found at once.
+5. If upload fails, save the request content to a local file and memory. Retry resending every 10 minutes. When retrying, do not send all past failed requests together. Retry each failed unit individually. If retry succeeds, remove it from the local file and memory, and exclude from retry targets.
+5. When the collection for the specified range from the manager api is complete, return to step 1 and start a new collection. If there are remaining retries from the previous collection, continue retrying.
+6. When the worker is intentionally terminated (ctrl+c, docker container stop, etc.), it must register that resume is needed with the termination api before exiting.
+
+## detail
+Refer to files such as collector_core.py, async_jp_fetcher.py, and progress_display.py in this project. Add missing columns as needed. These files were obtained from another project, so you may modify them.
+By passing ct_log_url, batch_size, collection complete size, and proxies to class CtLogCollecter, collection is executed. Worker nodes do not need a database, so unnecessary code can be removed.
+
+## notes
+Worker nodes will be run on IT engineer friends' PCs, so minimize logs and disk usage. Progress should be displayed about every 10 seconds.
+For example, information like this:
+🌐 Req: 574,476 | 📁 Uploaded: 72310 | 🇯🇵 JP: 72310 (0.504%) | 📍 Index: 33,287,774 | ⏱️ ETA: 34h 37m
+
+## script start command
+Basically, just run python worker.py. Allow multiple proxies to be added as options.
+Make it possible to specify options when starting with Docker-compose.
+Make it possible to start with docker run. I will register the image to docker-hub.
+Allow any name for friends. This is used by the manager api to identify which worker is which friend.
+Prepare a setup guide for friends.
+
+--------
+The operation of worker and manager will change significantly. Currently, only Google's logs are being collected. Now, logs will be collected simultaneously from four new endpoints. This is because each endpoint has its own rate limit, and requests will be made in parallel to servers with different rate limits. The target endpoints are divided into the following four categories.
+When starting, the worker receives instructions for each of the four categories. Progress is displayed for each category. The manager api gives instructions for all four at once.
+
+# cloudflare
+https://ct.cloudflare.com/logs/nimbus2022/ct/v1/get-sth
+https://ct.cloudflare.com/logs/nimbus2023/ct/v1/get-sth
+https://ct.cloudflare.com/logs/nimbus2024/ct/v1/get-sth
+https://ct.cloudflare.com/logs/nimbus2025/ct/v1/get-sth
+https://ct.cloudflare.com/logs/nimbus2026/ct/v1/get-sth
+
+# google
+https://ct.googleapis.com/logs/argon2022/ct/v1/get-sth
+https://ct.googleapis.com/logs/argon2023/ct/v1/get-sth
+https://ct.googleapis.com/logs/eu1/xenon2024/ct/v1/get-sth
+https://ct.googleapis.com/logs/eu1/xenon2025h1/ct/v1/get-sth
+https://ct.googleapis.com/logs/eu1/xenon2025h2/ct/v1/get-sth
+https://ct.googleapis.com/logs/eu1/xenon2026h1/ct/v1/get-sth
+https://ct.googleapis.com/logs/eu1/xenon2026h2/ct/v1/get-sth
+https://ct.googleapis.com/logs/us1/argon2024/ct/v1/get-sth
+https://ct.googleapis.com/logs/us1/argon2025h1/ct/v1/get-sth
+https://ct.googleapis.com/logs/us1/argon2025h2/ct/v1/get-sth
+https://ct.googleapis.com/logs/us1/argon2026h1/ct/v1/get-sth
+https://ct.googleapis.com/logs/us1/argon2026h2/ct/v1/get-sth
+https://ct.googleapis.com/logs/xenon2022/ct/v1/get-sth
+https://ct.googleapis.com/logs/xenon2023/ct/v1/get-sth
+
+# trustasia
+https://ct2024.trustasia.com/log2024/ct/v1/get-sth
+https://ct2025-a.trustasia.com/log2025a/ct/v1/get-sth
+https://ct2025-b.trustasia.com/log2025b/ct/v1/get-sth
+https://ct2026-a.trustasia.com/log2026a/ct/v1/get-sth
+https://ct2026-b.trustasia.com/log2026b/ct/v1/get-sth
+
+# digicert
+https://nessie2022.ct.digicert.com/log/ct/v1/get-sth
+https://nessie2023.ct.digicert.com/log/ct/v1/get-sth
+https://nessie2024.ct.digicert.com/log/ct/v1/get-sth
+https://nessie2025.ct.digicert.com/log/ct/v1/get-sth
+https://sphinx.ct.digicert.com/2024h1/ct/v1/get-sth
+https://sphinx.ct.digicert.com/2024h2/ct/v1/get-sth
+https://sphinx.ct.digicert.com/2025h1/ct/v1/get-sth
+https://sphinx.ct.digicert.com/2025h2/ct/v1/get-sth
+https://sphinx.ct.digicert.com/2026h1/ct/v1/get-sth
+https://sphinx.ct.digicert.com/2026h2/ct/v1/get-sth
+https://wyvern.ct.digicert.com/2024h1/ct/v1/get-sth
+https://wyvern.ct.digicert.com/2024h2/ct/v1/get-sth
+https://wyvern.ct.digicert.com/2025h1/ct/v1/get-sth
+https://wyvern.ct.digicert.com/2025h2/ct/v1/get-sth
+https://wyvern.ct.digicert.com/2026h1/ct/v1/get-sth
+https://wyvern.ct.digicert.com/2026h2/ct/v1/get-sth
+https://yeti2022-2.ct.digicert.com/log/ct/v1/get-sth
+https://yeti2022.ct.digicert.com/log/ct/v1/get-sth
+https://yeti2023.ct.digicert.com/log/ct/v1/get-sth
+https://yeti2024.ct.digicert.com/log/ct/v1/get-sth
+https://yeti2025.ct.digicert.com/log/ct/v1/get-sth
