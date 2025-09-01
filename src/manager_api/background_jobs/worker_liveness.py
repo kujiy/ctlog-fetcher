@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 
-from src.config import WORKER_LIVENESS_TTL
+from src.config import WORKER_LIVENESS_TTL, WORKER_DEAD_THRESHOLD_MINS
 from .. import models
 from ..db import get_async_session
 JST = timezone(timedelta(hours=9))

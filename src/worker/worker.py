@@ -20,7 +20,7 @@ import signal
 import traceback
 import re
 import datetime
-from src.config import CT_LOG_ENDPOINTS
+from src.config import CT_LOG_ENDPOINTS, WORKER_THREAD_MANAGER_INTERVAL_SEC
 from collections import Counter
 
 from dotenv import load_dotenv
@@ -557,7 +557,6 @@ def category_thread_manager(args, executor, category_thread_info):
     category_thread_info: { (category, idx): {"thread": future, "stop_event": event} }
     """
     register_stop_event()
-    INTERVAL_SEC = 600  # カテゴリ確認間隔
 
     my_stop_event = get_stop_event()
     while not my_stop_event.is_set():
@@ -598,7 +597,7 @@ def category_thread_manager(args, executor, category_thread_info):
                 info["stop_event"].set()
                 # No join (managed by ThreadPoolExecutor future)
 
-        sleep_with_stop_check(INTERVAL_SEC)
+        sleep_with_stop_check(WORKER_THREAD_MANAGER_INTERVAL_SEC)
 
 ordered_categories = []
 def fetch_categories(domain: str):
