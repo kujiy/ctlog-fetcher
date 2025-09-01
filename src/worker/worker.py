@@ -30,7 +30,7 @@ load_dotenv()
 
 logger = logging.getLogger("ct_worker")
 
-# --- 設定値 ---
+# --- Settings ---
 MAX_CONSOLE_LINES = 8
 DEFAULT_CATEGORIES = Counter(["google", "google", "google", "cloudflare", "letsencrypt", "digicert", "trustasia"])
 
@@ -40,7 +40,7 @@ FAILED_FILE_DIR = "tests/resources/failed"
 os.makedirs(FAILED_FILE_DIR, exist_ok=True)
 
 
-# 各スレッド用のstop_eventをグローバル管理
+# Global management of stop_event for each thread
 stop_events = {}
 
 def get_stop_event() -> threading.Event:
@@ -103,7 +103,7 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
     failed_uploads = []
     failed_lock = threading.Lock()
     ct_log_url = task.get('ct_log_url', '')
-    # taskに必要な情報をすべて持たせる
+    # Add all necessary information to the task
     task = task.copy()
     task["manager"] = args.manager
     task["worker_name"] = args.worker_name
@@ -157,7 +157,7 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
             logger.debug(f"[DEBUG] Fetched entries: {actual_entry_size} (current={current})")
 
             if empty_entries_count > 10:
-                logger.debug(f"[WARN] 10連続でentriesが空です: category={category} log_name={log_name} current={current}")
+                logger.debug(f"[WARN] Entries were empty 10 times in a row: category={category} log_name={log_name} current={current}")
                 break
             if not entries:
                 empty_entries_count += 1

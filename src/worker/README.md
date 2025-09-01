@@ -1,17 +1,17 @@
 # CT Log Fetcher Worker
 
-Pythonワーカーは、証明書Transparencyログ（CT Log）から日本関連証明書を分散収集し、Manager APIへアップロードするためのツールです。
+This Python worker is a tool for distributed collection of Japan-related certificates from Certificate Transparency (CT) logs and uploading them to the Manager API.
 
 ---
 
-## 必要要件
+## Requirements
 
-- Python 3.11 以上
-- `requests`, `python-dotenv` など（`requirements.txt` 参照）
+- Python 3.11 or higher
+- `requests`, `python-dotenv`, etc. (see `requirements.txt`)
 
 ---
 
-## インストール
+## Installation
 
 ```bash
 pip install -r requirements.txt
@@ -19,26 +19,26 @@ pip install -r requirements.txt
 
 ---
 
-## 起動方法
+## How to Run
 
-### 1. コマンドライン実行
+### 1. Command Line Execution
 
 ```bash
-python src/worker/worker.py [--proxies http://proxy1,http://proxy2] [--worker-name 名前] [--manager http://manager-url] [--debug]
+python src/worker/worker.py [--proxies http://proxy1,http://proxy2] [--worker-name NAME] [--manager http://manager-url] [--debug]
 ```
 
-### 2. 環境変数による設定
+### 2. Environment Variable Configuration
 
-すべてのオプションは環境変数でも指定できます（CLI引数が優先）。
+All options can also be specified via environment variables (CLI arguments take precedence).
 
-| 環境変数      | 説明                                 | 例                                  |
-|:------------- |:------------------------------------ |:----------------------------------- |
-| PROXIES       | プロキシURL（カンマ区切り複数可）    | `http://proxy1,http://proxy2`       |
-| WORKER_NAME   | ワーカー名                           | `my-worker`                         |
-| MANAGER_URL   | Manager APIのベースURL               | `http://localhost:8000`             |
-| DEBUG         | デバッグログ有効化（1/true/yes）     | `1`                                 |
+| Environment Variable | Description                              | Example                            |
+|:-------------------- |:-----------------------------------------|:-----------------------------------|
+| PROXIES              | Proxy URLs (comma-separated, multiple)    | `http://proxy1,http://proxy2`      |
+| WORKER_NAME          | Worker name                               | `my-worker`                        |
+| MANAGER_URL          | Manager API base URL                      | `http://localhost:8000`            |
+| DEBUG                | Enable debug logging (1/true/yes)         | `1`                                |
 
-例:
+Example:
 ```bash
 export PROXIES="http://proxy1,http://proxy2"
 export WORKER_NAME="my-worker"
@@ -49,49 +49,49 @@ python src/worker/worker.py
 
 ---
 
-## オプション一覧
+## Options
 
-- `--proxies`: プロキシURL（カンマ区切りで複数指定可）
-- `--worker-name`: ワーカー名（省略時は自動生成）
-- `--manager`: Manager APIのベースURL
-- `--debug`: デバッグログ有効化
-
----
-
-## 主な機能
-
-- Manager APIからジョブを取得し、CTログから証明書をバッチ取得
-- 日本関連証明書のみ抽出しアップロード
-- 進捗・完了・エラーをAPI経由で報告
-- 失敗したリクエストはpendingディレクトリに保存し自動リトライ
-- Ctrl+C等で安全に停止し、未完了ジョブはresumeリクエスト送信
-- .envファイル対応
+- `--proxies`: Proxy URLs (comma-separated, multiple allowed)
+- `--worker-name`: Worker name (auto-generated if omitted)
+- `--manager`: Manager API base URL
+- `--debug`: Enable debug logging
 
 ---
 
-## アーキテクチャ概要
+## Main Features
 
-- マルチスレッド（ThreadPoolExecutor）で複数カテゴリのジョブを並列処理
-- 進捗状況をコンソールにリアルタイム表示
-- 証明書パース・アップロード・エラーハンドリングを自動化
-
----
-
-## トラブルシューティング
-
-- 失敗したアップロードは `pending/` ディレクトリにJSONで保存され自動再送
-- エラー詳細はログまたはManager APIのエンドポイントに送信
-- ディスク容量・ネットワーク・Manager APIの疎通を確認
+- Fetch jobs from Manager API and batch fetch certificates from CT logs
+- Extract and upload only Japan-related certificates
+- Report progress, completion, and errors via API
+- Failed requests are saved in the `pending/` directory and retried automatically
+- Safe shutdown with Ctrl+C, sending resume requests for unfinished jobs
+- Supports .env file
 
 ---
 
-## 開発・テスト
+## Architecture Overview
 
-- テストは `tests/` ディレクトリ参照
-- 主要ロジックは `src/worker/worker.py` に集約
+- Multi-threaded (ThreadPoolExecutor) for parallel processing of multiple job categories
+- Real-time progress display in the console
+- Automated certificate parsing, uploading, and error handling
 
 ---
 
-## ライセンス
+## Troubleshooting
+
+- Failed uploads are saved as JSON in the `pending/` directory and retried automatically
+- Error details are sent to logs or Manager API endpoints
+- Check disk space, network connectivity, and Manager API availability
+
+---
+
+## Development & Testing
+
+- See the `tests/` directory for tests
+- Main logic is in `src/worker/worker.py`
+
+---
+
+## License
 
 MIT License
