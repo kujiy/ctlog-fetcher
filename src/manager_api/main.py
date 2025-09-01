@@ -25,7 +25,7 @@ from .background_jobs.sth_fetcher import start_sth_fetcher
 from .background_jobs.worker_liveness import start_worker_liveness_monitor
 from .background_jobs.unique_certs_counter import start_unique_certs_counter, get_unique_certs_count
 from .background_jobs.log_fetch_progress import start_log_fetch_progress
-from ..config import CT_LOG_ENDPOINTS, BACKGROUND_JOBS_ENABLED, ETA_BASE_DATE, LOG_FETCH_PROGRESS_TTL
+from ..config import CT_LOG_ENDPOINTS, BACKGROUND_JOBS_ENABLED, ETA_BASE_DATE, LOG_FETCH_PROGRESS_TTL, WORKER_CTLOG_REQUEST_INTERVAL_SEC, WORKER_PING_INTERVAL_SEC
 from .base_models import WorkerPingModel, WorkerPingBaseModel, WorkerResumeRequestModel, UploadCertItem, WorkerErrorModel
 import datetime as dt
 from ..share.animal import get_worker_emoji
@@ -42,8 +42,6 @@ BATCH_SIZE = 16000
 If this value is set too high, the worker will be mostly idle, and instructions from the manager API will not be reflected to the worker.
 Like communicating with a spaceship, it is desirable to set the interval to several minutes to several tens of minutes at most, so that communication can occur at a reasonable frequency.
 """
-WORKER_CTLOG_REQUEST_INTERVAL_SEC = 1
-WORKER_PING_INTERVAL_SEC = 300  # workerがpingを送る間隔（秒）
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 logger = app.logger = logging.getLogger("manager_api")

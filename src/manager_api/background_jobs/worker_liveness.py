@@ -1,5 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
+
+from src.config import WORKER_LIVENESS_TTL
 from .. import models
 from ..db import get_async_session
 JST = timezone(timedelta(hours=9))
@@ -11,7 +13,7 @@ async def worker_liveness_monitor():
     while True:
         async for session in get_async_session():
             now = datetime.now(JST)
-            threshold = now - timedelta(minutes=20)
+            threshold = now - timedelta(minutes=WORKER_DEAD_THRESHOLD_MINS)
             # print(threshold)
             result = await session.execute(
                 models.WorkerStatus.__table__.select().where(
@@ -37,7 +39,7 @@ async def worker_liveness_monitor():
                         .values(status='dead')
                     )
             await session.commit()
-        await asyncio.sleep(60)
+        await asyncio.sleep(WORKER_LIVENESS_TTL)
 
 def start_worker_liveness_monitor():
     asyncio.create_task(worker_liveness_monitor())
