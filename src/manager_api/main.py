@@ -80,44 +80,24 @@ async def on_startup():
     # Delayed initialization of DB engine
     init_engine()
     if BACKGROUND_JOBS_ENABLED:
-        launch_background_jobs()
+        app.state.background_tasks = []
+        app.state.background_tasks.append(start_sth_fetcher())
+        app.state.background_tasks.append(start_worker_liveness_monitor())
+        app.state.background_tasks.append(start_unique_certs_counter())
+        app.state.background_tasks.append(start_log_fetch_progress())
+        logger.info("Background jobs started and tasks stored in app.state.background_tasks")
 
-def launch_background_jobs():
-    # Prevent background jobs from starting multiple times when running multiple workers with gunicorn
-    # Use a file lock to start only in the first process
-    import fcntl
+@app.on_event("shutdown")
+async def on_shutdown():
+    tasks = getattr(app.state, "background_tasks", [])
+    for t in tasks:
+        if t is not None:
+            t.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+    logger.info("Background jobs cancelled on shutdown")
 
-    # More reliable lock file path (directly specify /tmp)
-    lock_file_path = "/tmp/ct_background_jobs.lock"
-
-    try:
-        # Open the lock file (create if it doesn't exist)
-        lock_file = open(lock_file_path, 'w')
-        # Try non-blocking lock
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-        # Start background jobs only if lock is acquired
-        logger.info(f"Acquired background jobs lock ({lock_file_path}). Starting background jobs...")
-        start_sth_fetcher()
-        start_worker_liveness_monitor()
-        start_unique_certs_counter()
-        start_log_fetch_progress()
-        # Temporarily stopped because processing cannot keep up at all
-        # start_unique_certs_updater()
-        logger.info("Background jobs started successfully")
-
-        # Keep the lock file open so it is automatically released when the process exits
-        # Hold as a global variable to prevent GC
-        app.state.background_jobs_lock_file = lock_file
-
-    except (IOError, OSError) as e:
-        # If lock cannot be acquired (another process is already running)
-        logger.info(f"Background jobs already running in another process (lock file: {lock_file_path})")
-        try:
-            lock_file.close()
-        except:
-            pass
-
+# launch_background_jobsは不要になるため削除
 
 
 @app.get("/api/worker/next_task")

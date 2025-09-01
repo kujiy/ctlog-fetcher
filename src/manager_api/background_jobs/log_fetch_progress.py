@@ -17,40 +17,44 @@ async def aggregate_log_fetch_progress():
     # In-memory cache for last min_completed_end per (category, log_name)
     last_completed_map = {}
 
-    while True:
-        async for session in get_async_session():
-            now = datetime.utcnow()
-            logger.info(now.isoformat())
-            for category, endpoints in CT_LOG_ENDPOINTS.items():
-                for log_name, ct_log_url in endpoints:
-                    logger.info(f"Fetching {log_name} progress from {ct_log_url}")
-                    # Get latest STH for this log_name
-                    sth_end = await sth_by_log_name(log_name, session)
+    try:
+        while True:
+            async for session in get_async_session():
+                now = datetime.utcnow()
+                logger.info(now.isoformat())
+                for category, endpoints in CT_LOG_ENDPOINTS.items():
+                    for log_name, ct_log_url in endpoints:
+                        logger.info(f"Fetching {log_name} progress from {ct_log_url}")
+                        # Get latest STH for this log_name
+                        sth_end = await sth_by_log_name(log_name, session)
 
-                    # Find min_completed_end using BATCH_SIZE logic, start from last known
-                    min_completed_end = last_completed_map.get((category, log_name), None)
-                    if sth_end is not None:
-                        if min_completed_end is not None:
-                            i = min_completed_end + BATCH_SIZE
-                        else:
-                            i = BATCH_SIZE - 1
-                        while i <= sth_end:
-                            if await get_completed_worker_status(i, log_name, session):
-                                min_completed_end = i
-                                i += BATCH_SIZE
+                        # Find min_completed_end using BATCH_SIZE logic, start from last known
+                        min_completed_end = last_completed_map.get((category, log_name), None)
+                        if sth_end is not None:
+                            if min_completed_end is not None:
+                                i = min_completed_end + BATCH_SIZE
                             else:
-                                break
-                        # Update cache
-                        last_completed_map[(category, log_name)] = min_completed_end
+                                i = BATCH_SIZE - 1
+                            while i <= sth_end:
+                                if await get_completed_worker_status(i, log_name, session):
+                                    min_completed_end = i
+                                    i += BATCH_SIZE
+                                else:
+                                    break
+                            # Update cache
+                            last_completed_map[(category, log_name)] = min_completed_end
 
-                    # Determine fetch_rate
-                    fetch_rate, status = await extract_info(min_completed_end, sth_end)
+                        # Determine fetch_rate
+                        fetch_rate, status = await extract_info(min_completed_end, sth_end)
 
-                    # Upsert into LogFetchProgress
-                    await upcert_log_fetch_progress(category, fetch_rate, log_name, min_completed_end, now, session,
-                                                    status, sth_end)
-                    logger.info(f"Updated {log_name} progress from {ct_log_url} as min_completed_end={min_completed_end}, sth_end={sth_end}, fetch_rate={fetch_rate}, status={status}")
-        await asyncio.sleep(LOG_FETCH_PROGRESS_TTL)
+                        # Upsert into LogFetchProgress
+                        await upcert_log_fetch_progress(category, fetch_rate, log_name, min_completed_end, now, session,
+                                                        status, sth_end)
+                        logger.info(f"Updated {log_name} progress from {ct_log_url} as min_completed_end={min_completed_end}, sth_end={sth_end}, fetch_rate={fetch_rate}, status={status}")
+            await asyncio.sleep(LOG_FETCH_PROGRESS_TTL)
+    except asyncio.CancelledError:
+        # Graceful shutdown
+        return
 
 
 async def sth_by_log_name(log_name, session):
@@ -121,7 +125,7 @@ async def get_completed_worker_status(i, log_name, session):
 
 
 def start_log_fetch_progress():
-    asyncio.create_task(aggregate_log_fetch_progress())
+    return asyncio.create_task(aggregate_log_fetch_progress())
 
 
 if __name__ == '__main__':

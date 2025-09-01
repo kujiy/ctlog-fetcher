@@ -34,42 +34,46 @@ async def fetch_sth_no_retry(log_name, ct_log_url, now):
         return None, None
 
 async def fetch_and_store_sth():
-    while True:
-        async for session in get_async_session():
-            now = datetime.utcnow()
-            for category, endpoints in CT_LOG_ENDPOINTS.items():
-                for log_name, ct_log_url in endpoints:
-                    tree_size, sth_dt = await fetch_sth_no_retry(log_name, ct_log_url, now)
-                    if tree_size is None or sth_dt is None:
-                        continue
-                    # Overwrite if record exists, otherwise insert new
-                    entry = await session.execute(
-                        CTLogSTH.__table__.select().where(
-                            (CTLogSTH.log_name == log_name) & (CTLogSTH.ct_log_url == ct_log_url)
-                        )
-                    )
-                    entry = entry.fetchone()
-                    if entry:
-                        await session.execute(
-                            CTLogSTH.__table__.update()
-                            .where((CTLogSTH.log_name == log_name) & (CTLogSTH.ct_log_url == ct_log_url))
-                            .values(tree_size=tree_size, sth_timestamp=sth_dt, fetched_at=now)
-                        )
-                    else:
-                        await session.execute(
-                            CTLogSTH.__table__.insert().values(
-                                log_name=log_name,
-                                ct_log_url=ct_log_url,
-                                tree_size=tree_size,
-                                sth_timestamp=sth_dt,
-                                fetched_at=now
+    try:
+        while True:
+            async for session in get_async_session():
+                now = datetime.utcnow()
+                for category, endpoints in CT_LOG_ENDPOINTS.items():
+                    for log_name, ct_log_url in endpoints:
+                        tree_size, sth_dt = await fetch_sth_no_retry(log_name, ct_log_url, now)
+                        if tree_size is None or sth_dt is None:
+                            continue
+                        # Overwrite if record exists, otherwise insert new
+                        entry = await session.execute(
+                            CTLogSTH.__table__.select().where(
+                                (CTLogSTH.log_name == log_name) & (CTLogSTH.ct_log_url == ct_log_url)
                             )
                         )
-                    await session.commit()
-        await asyncio.sleep(60)  # 5分ごと
+                        entry = entry.fetchone()
+                        if entry:
+                            await session.execute(
+                                CTLogSTH.__table__.update()
+                                .where((CTLogSTH.log_name == log_name) & (CTLogSTH.ct_log_url == ct_log_url))
+                                .values(tree_size=tree_size, sth_timestamp=sth_dt, fetched_at=now)
+                            )
+                        else:
+                            await session.execute(
+                                CTLogSTH.__table__.insert().values(
+                                    log_name=log_name,
+                                    ct_log_url=ct_log_url,
+                                    tree_size=tree_size,
+                                    sth_timestamp=sth_dt,
+                                    fetched_at=now
+                                )
+                            )
+                        await session.commit()
+            await asyncio.sleep(60)  # 5分ごと
+    except asyncio.CancelledError:
+        # Graceful shutdown
+        return
 
 def start_sth_fetcher():
-    asyncio.create_task(fetch_and_store_sth())
+    return asyncio.create_task(fetch_and_store_sth())
 
 if __name__ == '__main__':
     asyncio.run(fetch_and_store_sth())
