@@ -24,7 +24,7 @@ from .certificate_cache import cert_cache
 from .background_jobs.sth_fetcher import start_sth_fetcher
 from .background_jobs.worker_liveness import start_worker_liveness_monitor
 from .background_jobs.unique_certs_counter import start_unique_certs_counter, get_unique_certs_count
-from ..config import CT_LOG_ENDPOINTS, BACKGROUND_JOBS_ENABLED
+from ..config import CT_LOG_ENDPOINTS, BACKGROUND_JOBS_ENABLED, ETA_BASE_DATE
 from .base_models import WorkerPingModel, WorkerPingBaseModel, WorkerResumeRequestModel, UploadCertItem, WorkerErrorModel
 import datetime as dt
 from ..share.animal import get_worker_emoji
@@ -142,65 +142,17 @@ async def get_next_task(
             if tree_size == 0:
                 continue  # Skip logs with tree_size 0
 
-            # Get distinct end values for this log (sorted ascending)
-            end_stmt = select(WorkerStatus.end).where(
-                WorkerStatus.log_name == log_name
-            ).distinct().order_by(WorkerStatus.end.asc())
-            end_results = (await db.execute(end_stmt)).all()
-            end_list = [row[0] for row in end_results]
+            end_list = await get_end_list_by_lob_name(db, log_name)
             logger.info(f"[next_task] end_list for {log_name}: {end_list}")
 
             i = BATCH_SIZE - 1
             max_end = tree_size - 1
 
             while i <= max_end:
-                if i in end_list:
-                    i += BATCH_SIZE
-                    continue
-                else:
-                    running_stmt = select(WorkerStatus).where(
-                        WorkerStatus.log_name == log_name,
-                        WorkerStatus.end == i,
-                        WorkerStatus.status.in_([JobStatus.RUNNING.value, JobStatus.COMPLETED.value])
-                    )
-                    running_or_completed_count = len((await db.execute(running_stmt)).scalars().all())
-
-                    if running_or_completed_count > 0:
-                        i += BATCH_SIZE
-                        continue
-                    else:
-                        start = i - BATCH_SIZE + 1
-                        end = i
-                        if start < 0:
-                            start = 0
-
-                        logger.info(f"[next_task] assigning task: log_name={log_name} start={start} end={end}")
-
-                        ws = WorkerStatus(
-                            worker_name=worker_name,
-                            log_name=log_name,
-                            ct_log_url=ct_log_url,
-                            start=start,
-                            end=end,
-                            current=start,
-                            status=JobStatus.RUNNING.value,
-                            last_ping=None,
-                            ip_address=None
-                        )
-                        db.add(ws)
-                        await db.commit()
-
-                        res = {
-                            "log_name": log_name,
-                            "ct_log_url": ct_log_url,
-                            "start": start,
-                            "end": end,
-                            "ip_address": ws.ip_address,
-                            "ctlog_request_interval_sec": WORKER_CTLOG_REQUEST_INTERVAL_SEC
-                        }
-
-                        return res
-                # end while
+                res = await find_next_task(ct_log_url, db, end_list, i, log_name, worker_name)
+                if res:
+                    return res
+                continue
             # end for log_name
         # If all logs are collected, return sleep instruction to worker
         return {"message": "all logs completed", "sleep_sec": 120}
@@ -239,7 +191,71 @@ async def get_next_task(
     # return job
 
 
+async def get_end_list_by_lob_name(db, log_name):
+    # Get distinct end values for this log (sorted ascending)
+    end_stmt = select(WorkerStatus.end).where(
+        WorkerStatus.log_name == log_name
+    ).distinct().order_by(WorkerStatus.end.asc())
+    end_results = (await db.execute(end_stmt)).all()
+    end_list = [row[0] for row in end_results]
+    return end_list
 
+
+async def find_next_task(ct_log_url, db, end_list, i, log_name, worker_name):
+    if i in end_list:
+        i += BATCH_SIZE
+        return None
+    else:
+        running_or_completed_count = await get_running_or_completed_count(db, i, log_name)
+
+        if running_or_completed_count > 0:
+            i += BATCH_SIZE
+            return None
+        else:
+            start = i - BATCH_SIZE + 1
+            end = i
+            if start < 0:
+                start = 0
+
+            logger.info(f"[next_task] assigning task: log_name={log_name} start={start} end={end}")
+
+            ws = await save_worker_status(ct_log_url, db, end, log_name, start, worker_name)
+
+            return {
+                "log_name": log_name,
+                "ct_log_url": ct_log_url,
+                "start": start,
+                "end": end,
+                "ip_address": ws.ip_address,
+                "ctlog_request_interval_sec": WORKER_CTLOG_REQUEST_INTERVAL_SEC
+            }
+
+
+async def save_worker_status(ct_log_url, db, end, log_name, start, worker_name):
+    ws = WorkerStatus(
+        worker_name=worker_name,
+        log_name=log_name,
+        ct_log_url=ct_log_url,
+        start=start,
+        end=end,
+        current=start,
+        status=JobStatus.RUNNING.value,
+        last_ping=None,
+        ip_address=None
+    )
+    db.add(ws)
+    await db.commit()
+    return ws
+
+
+async def get_running_or_completed_count(db, i, log_name):
+    running_stmt = select(WorkerStatus).where(
+        WorkerStatus.log_name == log_name,
+        WorkerStatus.end == i,
+        WorkerStatus.status.in_([JobStatus.RUNNING.value, JobStatus.COMPLETED.value])
+    )
+    running_or_completed_count = len((await db.execute(running_stmt)).scalars().all())
+    return running_or_completed_count
 
 
 @app.post("/api/worker/upload")
