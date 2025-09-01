@@ -24,6 +24,7 @@ from .certificate_cache import cert_cache
 from .background_jobs.sth_fetcher import start_sth_fetcher
 from .background_jobs.worker_liveness import start_worker_liveness_monitor
 from .background_jobs.unique_certs_counter import start_unique_certs_counter, get_unique_certs_count
+from .background_jobs.log_fetch_progress import start_log_fetch_progress
 from ..config import CT_LOG_ENDPOINTS, BACKGROUND_JOBS_ENABLED, ETA_BASE_DATE
 from .base_models import WorkerPingModel, WorkerPingBaseModel, WorkerResumeRequestModel, UploadCertItem, WorkerErrorModel
 import datetime as dt
@@ -102,6 +103,7 @@ def launch_background_jobs():
         start_sth_fetcher()
         start_worker_liveness_monitor()
         start_unique_certs_counter()
+        start_log_fetch_progress()
         # Temporarily stopped because processing cannot keep up at all
         # start_unique_certs_updater()
         logger.info("Background jobs started successfully")

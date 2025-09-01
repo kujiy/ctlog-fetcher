@@ -188,6 +188,22 @@ class WorkerLogStat(Base):
 
 
 
+class LogFetchProgress(Base):
+    __tablename__ = 'log_fetch_progress'
+    id = Column(Integer, primary_key=True)
+    category = Column(String(64), index=True, nullable=False)
+    log_name = Column(String(64), index=True, nullable=False)
+    min_completed_end = Column(BigInteger, nullable=True)
+    sth_end = Column(BigInteger, nullable=True)
+    fetch_rate = Column(String(32), nullable=True)  # 取得率 (float as string for compatibility)
+    status = Column(String(32), nullable=False)  # "completed" or "in_progress"
+    updated_at = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        Index('idx_log_fetch_progress_cat_log', 'category', 'log_name', unique=True),
+        Index('idx_log_fetch_progress_status', 'status'),
+    )
+
 # Example DB connection
 #engine = create_engine('mysql+pymysql://root@127.0.0.1:3306/ct')
 # Base.metadata.create_all(engine)
