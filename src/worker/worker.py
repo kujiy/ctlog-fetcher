@@ -23,7 +23,6 @@ import datetime
 from src.config import CT_LOG_ENDPOINTS
 from collections import Counter
 
-# .env対応
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -57,11 +56,10 @@ class NeedTreeSizeException(Exception):
 
 def fetch_ct_log(ct_log_url, start, end, proxies=None):
     # Google CT log API: /ct/v1/get-entries?start={start}&end={end}
-    # URL末尾の/重複を防ぐ
     base_url = ct_log_url.rstrip('/')
     url = f"{base_url}/ct/v1/get-entries?start={start}&end={end}"
     try:
-        # proxiesがリストの場合はランダムで選択
+        # If proxies is a list, select randomly
         if proxies and isinstance(proxies, list):
             proxy_url = random.choice(proxies)
             use_proxies = {"http": proxy_url, "https": proxy_url}
@@ -85,7 +83,7 @@ def fetch_ct_log(ct_log_url, start, end, proxies=None):
             logger.debug(f"NeedTreeSizeException: {resp.text} url={url}")
             raise NeedTreeSizeException(resp.text)
         else:
-            logger.debug(f"CT log取得失敗: {resp.status_code} url={url}")
+            logger.debug(f"Failed to fetch CT log: {resp.status_code} url={url}")
             return []
     except Exception as e:
         logger.debug(f"fetch_ct_log exception: [{type(e).__name__}] {e} url={url}")
@@ -173,15 +171,15 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
             # Parsing
             jp_certs = extract_jp_certs(entries, log_name, ct_log_url, args, my_ip, current)
             if jp_certs:
-                worker_jp_count += len(jp_certs)  # workerとしては見つけたjp_certs数をご褒美にするので、重複排除前に加算する
+                worker_jp_count += len(jp_certs)  # Add the number of found jp_certs before deduplication as a reward for the worker
                 jp_certs_buffer.extend(jp_certs)
                 before = len(jp_certs_buffer)
-                # 重複除去
+                # Remove duplicates
                 jp_certs_buffer = filter_jp_certs_unique(jp_certs_buffer)
                 after = len(jp_certs_buffer)
                 logger.debug(f"[DEBUG] JP certs buffer: before={before} after={after} added={len(jp_certs)} total_jp_count={worker_jp_count}")
 
-            # 32件以上溜まったら送信
+            # upload if buffer is large enough
             if len(jp_certs_buffer) >= 32:
                 last_uploaded_index = upload_jp_certs(args, category, current, jp_certs_buffer, failed_lock)
                 jp_certs_buffer = []
@@ -196,16 +194,16 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
             logger.debug(f"ctlog_request_interval_sec: {ctlog_request_interval_sec}")
             sleep_with_stop_check(ctlog_request_interval_sec, my_stop_event)
 
-            # entryが空の場合は無限ループする可能性があるがempty_entries_countでbreakするので問題ない
+            # if the entry is empty, it may loop infinitely, but it will break with empty_entries_count, so it's okay
             current += actual_entry_size
             task["current"] = current
 
-        # ループ終了時に残りを送信
+        # Upload the remaining jp_certs anyway at the end of the job
         if jp_certs_buffer:
             last_uploaded_index = upload_jp_certs(args, category, current, jp_certs_buffer, failed_lock)
     except Exception as e:
         tb = traceback.format_exc()
-        logger.error(f"[{category}] worker_job_thread例外:\n{tb}")
+        logger.error(f"[{category}] Exception in worker_job_thread:\n{tb}")
         report_worker_error(
             args=args,
             error_type="worker_job_thread_error",
@@ -215,10 +213,10 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
         return None
 
 
-    # job完了時にstatusをcompletedに
+    # update the status as completed
     status_key = f"{category}-{log_name}"
     if my_stop_event and my_stop_event.is_set():
-        # カテゴリAPIによる正常な停止の場合はconsoleから消すだけ
+        # Erase from console when stopped by category API (normal stop)
         if status_key in status_lines:
             del status_lines[status_key]
         logger.debug(f"[DEBUG] Exit job (stopped by category API): category={category} log_name={log_name} current={current} end={end}")
@@ -234,7 +232,7 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
             f"[{category}] {console_msg} Commited {fetched_rate*100:.1f}% ({worker_total_count}/{expect_total_count}) | Range: {task['start']} - {task['end']}  | 🇯🇵 Domain: {worker_jp_count} | おみくじ {random.choice(omikuji_list)}"
         )
     else:
-        # 異常終了のみ❌ Failed.を表示
+        # Show "❌ Failed." only for abnormal termination(including Ctrl+C)
         console_msg = "❌ Failed."
         send_resume(task)
         expect_total_count = end - task.get('start', 0) + 1
@@ -248,7 +246,7 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
 
 
 
-# --- 汎用リトライ管理 ---
+# --- common retrying process ---
 def save_pending_request(request_info, prefix):
     """
     request_info: dict with keys: url, method, data
@@ -296,14 +294,14 @@ def send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded
         resp = requests.post(url, json=completed_data, timeout=10)
         if resp.status_code != 200:
             # Log detailed API response for debugging
-            logger.debug(f"[worker] completed api送信失敗: status={resp.status_code}")
+            logger.debug(f"[worker] failed to send completed api: status={resp.status_code}")
             logger.debug(f"[worker] completed api response body: {resp.text}")
             logger.debug(f"[worker] completed api request data: {json.dumps(completed_data, indent=2)}")
             raise Exception(f"status={resp.status_code} body={resp.text}")
         else:
-            logger.debug(f"[worker] completed api送信成功: {log_name} range={task.get('start')}-{end}")
+            logger.debug(f"[worker] completed api - successfully sent: {log_name} range={task.get('start')}-{end}")
     except Exception as e:
-        logger.debug(f"[worker] completed api送信失敗: {e}")
+        logger.debug(f"[worker] failed to send completed api: {e}")
         save_pending_request({
             "url": url,
             "method": "POST",
@@ -317,7 +315,7 @@ def send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded
 # 汎用リトライファイル処理
 def process_pending_requests_files(args, file_glob="pending_*.json"):
     """
-    pending_*.jsonファイルをスキャンし、リクエスト成功したものを削除する。
+    Scan pending_*.json files and delete those whose requests succeed.
     """
     deleted = 0
     for req_file in glob.glob(os.path.join(PENDING_FILE_DIR, file_glob)):
@@ -345,7 +343,7 @@ def process_pending_requests_files(args, file_glob="pending_*.json"):
                 continue
 
             if resp.status_code == 200:
-                logger.debug(f"[retry-success] {req_file} resend成功")
+                logger.debug(f"[retry-success] {req_file} resend succeeded")
                 os.remove(req_file)
                 deleted += 1
             else:
@@ -416,7 +414,7 @@ def handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, task_re
 
 def category_job_manager(category, args, global_tasks, my_stop_event):
     logger.debug(f"category_job_manager: {category} ident={threading.get_ident()}")
-    """カテゴリごとにjobを順次取得・実行するマネージャ（ThreadPoolExecutor統一版）"""
+    """Manager to sequentially fetch and execute jobs for each category (ThreadPoolExecutor version)"""
     last_job = None
     fail_count = 0
     MAX_FAIL = 3
@@ -450,7 +448,7 @@ def category_job_manager(category, args, global_tasks, my_stop_event):
                     ctlog_request_interval_sec = int(task.get("ctlog_request_interval_sec", 1))
                     last_job = task.copy()
                 else:
-                    logger.debug(f"{category}: next_task取得失敗: {resp.status_code}")
+                    logger.debug(f"{category}: failed to get next_task: {resp.status_code}")
                     fail_count += 1
                     # 2秒待機。ただしstop_eventが立ったら即return
                     sleep_with_stop_check(2, my_stop_event)
@@ -464,7 +462,7 @@ def category_job_manager(category, args, global_tasks, my_stop_event):
                         continue
             except requests.exceptions.RequestException as e:
                 # 通信系エラーは想定内
-                logger.debug(f"[{category}] next_task取得通信エラー. The manager api might have been down. : {e}")
+                logger.debug(f"[{category}] Communication error getting next_task. The manager api might have been down. : {e}")
                 fail_count += 1
                 sleep_with_stop_check(1, my_stop_event)
                 result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, [task])
@@ -474,7 +472,7 @@ def category_job_manager(category, args, global_tasks, my_stop_event):
                     continue
             except Exception as e:
                 tb = traceback.format_exc()
-                logger.error(f"[{category}] next_task取得例外(moving to the fail-safe mode):\n{tb}")
+                logger.error(f"[{category}] Exception getting next_task (moving to the fail-safe mode):\n{tb}")
                 report_worker_error(
                     args=args,
                     error_type="category_job_manager_error",
@@ -508,10 +506,10 @@ def category_job_manager(category, args, global_tasks, my_stop_event):
             if completed_task is not None:
                 last_job = completed_task
             if not my_stop_event.is_set():
-                logger.debug(f"{category}: job完了。次のjobを取得")
+                logger.debug(f"{category}: job completed. Fetching next job")
     except Exception as e:
         tb = traceback.format_exc()
-        logger.error(f"[{category}] category_job_manager全体例外:\n{tb}")
+        logger.error(f"[{category}] Exception in category_job_manager:\n{tb}")
         report_worker_error(
             args=args,
             error_type="category_job_manager_fatal",
@@ -555,7 +553,7 @@ def category_job_manager_with_wrapper(category, args, global_tasks, stop_event):
 # --- カテゴリ監視スレッド ---
 def category_thread_manager(args, executor, category_thread_info):
     """
-    定期的に/api/worker/categoriesを呼び、カテゴリスレッドの増減を管理する。
+    Periodically call /api/worker/categories and manage the increase/decrease of category threads.
     category_thread_info: { (category, idx): {"thread": future, "stop_event": event} }
     """
     register_stop_event()
@@ -568,38 +566,37 @@ def category_thread_manager(args, executor, category_thread_info):
         # 現在のスレッド状態を取得
         running_counts = {}
         for (cat, idx), info in list(category_thread_info.items()):
-            # info["thread"]はThreadPoolExecutor.submitの戻り値（Future）です
+            # info["thread"] is the return value of ThreadPoolExecutor.submit (Future)
             if info["thread"].done():
-                # 終了済みスレッドは削除
+                # Remove finished threads
                 del category_thread_info[(cat, idx)]
                 continue
             running_counts[cat] = running_counts.get(cat, 0) + 1
 
-        # all_categoriesにないcatのスレッドは即停止・削除
+        # Immediately stop and remove threads for categories not in all_categories
         for (cat, idx), info in list(category_thread_info.items()):
             if cat not in all_categories:
                 info["stop_event"].set()
                 del category_thread_info[(cat, idx)]
 
-        # スレッドの増減
-        # 1. 増やす
-        for cat, desired in desired_counts.items():    # google, digicert...
-            running = running_counts.get(cat, 0)      # google は 3 threads 必要、といったcount
-            # logger.warning(f"[{cat}] {desired}:{running} (desired:running)")
-            for i in range(running, desired):        # 指定 thread countに足りない分を増やす
-                # google, digicertなどの新規スレッド起動
+        # Thread scaling
+        # 1. Increase
+        for cat, desired in desired_counts.items():    # e.g. google, digicert...
+            running = running_counts.get(cat, 0)      # e.g. google needs 3 threads
+            for i in range(running, desired):        # Start new threads as needed
+                # start the new thread for categories e.g. google, digicert
                 stop_evt = threading.Event()
                 future = executor.submit(category_job_manager_with_wrapper, cat, args, global_tasks, stop_evt)
                 category_thread_info[(cat, i)] = {"thread": future, "stop_event": stop_evt}
                 time.sleep(1)
 
-        # 2. 減らす
+        # 2. Decrease
         for (cat, idx), info in list(category_thread_info.items()):
             desired = desired_counts.get(cat, 0)
             if idx >= desired:
-                # 停止指示
+                # Stop instruction
                 info["stop_event"].set()
-                # joinはしない（ThreadPoolExecutorのfutureで管理）
+                # No join (managed by ThreadPoolExecutor future)
 
         sleep_with_stop_check(INTERVAL_SEC)
 
