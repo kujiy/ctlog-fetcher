@@ -138,7 +138,7 @@ class JPCertificateParser:
         # Basic certificate information
         cert_data = self._extract_basic_info(certificate, ct_entry)
         cert_data.update(self._extract_extension_urls(certificate))
-        cert_data.update(self._extract_timing_info(certificate))
+        cert_data.update(self._extract_timing_info(certificate, ct_log_timestamp))
         # For compatibility, still call _extract_jp_specific_info, but pass all domains
         cert_data.update(self._extract_jp_specific_info(certificate, domains))
         cert_data.update(self._extract_technical_info(certificate))
@@ -342,30 +342,29 @@ class JPCertificateParser:
 
         return data
 
-    def _extract_timing_info(self, certificate) -> Dict[str, Any]:
-        """Extract timing-related information for Japan."""
+    def _extract_timing_info(self, certificate, ct_log_timestamp) -> Dict[str, Any]:
+        """Extract timing-related information for Japan using ct_log_timestamp."""
         data = {
             'issued_on_weekend': False,
             'issued_at_night': False
         }
 
         try:
-            # Convert to Japan time
-            not_before_utc = certificate.not_valid_before_utc
-            not_before_jp = not_before_utc.replace(tzinfo=timezone.utc).astimezone(self.jp_tz)
+            # Convert to Japan time using ct_log_timestamp
+            ct_jp = ct_log_timestamp.astimezone(self.jp_tz)
 
             # Check if issued on weekend
-            weekday = not_before_jp.weekday()  # 0=Monday, 6=Sunday
+            weekday = ct_jp.weekday()  # 0=Monday, 6=Sunday
             data['issued_on_weekend'] = weekday >= 5  # Saturday or Sunday
 
             # Check if issued at night (20:00 - 08:00 JST)
-            hour = not_before_jp.hour
+            hour = ct_jp.hour
             data['issued_at_night'] = hour >= 20 or hour < 8
 
             # Check if issued on Japanese holiday (if jpholiday is available)
             if HAS_JPHOLIDAY:
                 try:
-                    date_only = not_before_jp.date()
+                    date_only = ct_jp.date()
                     if jpholiday.is_holiday(date_only):
                         data['issued_on_weekend'] = True  # Treat holidays as weekends
                 except Exception:
