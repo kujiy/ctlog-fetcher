@@ -1,12 +1,29 @@
 # Git related
 .git
 .gitignore
+pending/*
+tests/
+scripts
+dump
+docs
+ddns
+.git.*
+*cache
+.idea
+.vscode
+*.log
 
 # Local settings and logs
 *.log
 *.env
 tmp/
 build/
+docker*
+build*
+Docker*
+start*
+stop*
+*.sh
 
 # Python cache
 __pycache__/
