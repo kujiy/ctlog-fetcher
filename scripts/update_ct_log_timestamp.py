@@ -1,3 +1,8 @@
+"""
+A batch fulfills the requirement of processing a specific range of certificate entries
+- add the ct_log_timestamp
+- recalculate the issued_at_night from the ct_log_timestamp
+"""
 import os
 import time
 import logging
@@ -42,6 +47,17 @@ def get_db_connection():
         autocommit=True
     )
 
+def get_last_start(tmp_file="/tmp/ct_update_last_start.txt"):
+    try:
+        with open(tmp_file, "r") as f:
+            return int(f.read().strip())
+    except Exception:
+        return None
+
+def set_last_start(start, tmp_file="/tmp/ct_update_last_start.txt"):
+    with open(tmp_file, "w") as f:
+        f.write(str(start) + "\n")
+
 def main():
     parser = JPCertificateParser()
     processed = 0
@@ -53,17 +69,26 @@ def main():
             min_id = ids["min_id"] or 1
             max_id = ids["max_id"] or 1
 
-    current_id = min_id
+    last_start = get_last_start()
+    if last_start is not None and last_start >= min_id:
+        current_id = last_start + BATCH_SIZE
+    else:
+        current_id = min_id
+
     while current_id <= max_id:
+        batch_start = current_id
+        batch_end = min(current_id + BATCH_SIZE - 1, max_id)
+
         with get_db_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT id, ct_entry FROM Certs WHERE id BETWEEN %s AND %s AND ct_log_timestamp IS NULL",
-                    (current_id, current_id + BATCH_SIZE - 1)
+                    (batch_start, batch_end)
                 )
                 rows = cur.fetchall()
 
                 if not rows:
+                    set_last_start(batch_start)
                     current_id += BATCH_SIZE
                     continue
 
@@ -92,6 +117,7 @@ def main():
                         logging.error(f"Error processing Cert id={cert_id}: {e}")
 
                 processed += len(rows)
+                set_last_start(batch_start)
                 logging.info(f"Processed {processed} rows so far. Sleeping {SLEEP_PER_BATCH:.1f} seconds.")
                 time.sleep(SLEEP_PER_BATCH)
         current_id += BATCH_SIZE
