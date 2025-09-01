@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime
 from sqlalchemy import select, update, insert
 from src.manager_api.models import WorkerStatus, CTLogSTH, LogFetchProgress
-from src.config import CT_LOG_ENDPOINTS
+from src.config import CT_LOG_ENDPOINTS, LOG_FETCH_PROGRESS_TTL
 from src.manager_api.db import get_async_session
 from src.share.job_status import JobStatus
 
@@ -10,7 +10,6 @@ import logging
 
 logger = logging.getLogger("log_fetch_progress")
 
-INTERVAL = 600
 BATCH_SIZE = 16000
 
 
@@ -51,7 +50,7 @@ async def aggregate_log_fetch_progress():
                     await upcert_log_fetch_progress(category, fetch_rate, log_name, min_completed_end, now, session,
                                                     status, sth_end)
                     logger.info(f"Updated {log_name} progress from {ct_log_url} as min_completed_end={min_completed_end}, sth_end={sth_end}, fetch_rate={fetch_rate}, status={status}")
-        await asyncio.sleep(INTERVAL)
+        await asyncio.sleep(LOG_FETCH_PROGRESS_TTL)
 
 
 async def sth_by_log_name(log_name, session):

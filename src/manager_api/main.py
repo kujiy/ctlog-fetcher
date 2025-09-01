@@ -25,7 +25,7 @@ from .background_jobs.sth_fetcher import start_sth_fetcher
 from .background_jobs.worker_liveness import start_worker_liveness_monitor
 from .background_jobs.unique_certs_counter import start_unique_certs_counter, get_unique_certs_count
 from .background_jobs.log_fetch_progress import start_log_fetch_progress
-from ..config import CT_LOG_ENDPOINTS, BACKGROUND_JOBS_ENABLED, ETA_BASE_DATE
+from ..config import CT_LOG_ENDPOINTS, BACKGROUND_JOBS_ENABLED, ETA_BASE_DATE, LOG_FETCH_PROGRESS_TTL
 from .base_models import WorkerPingModel, WorkerPingBaseModel, WorkerResumeRequestModel, UploadCertItem, WorkerErrorModel
 import datetime as dt
 from ..share.animal import get_worker_emoji
@@ -144,17 +144,21 @@ async def get_next_task(
             if tree_size == 0:
                 continue  # Skip logs with tree_size 0
 
-            end_list = await get_end_list_by_lob_name(db, log_name)
-            logger.info(f"[next_task] end_list for {log_name}: {end_list}")
-
-            i = BATCH_SIZE - 1
+            min_completed_end = await get_min_completed_end(db, log_name, category)
+            if min_completed_end is not None:
+                i = min_completed_end + BATCH_SIZE
+            else:
+                i = BATCH_SIZE - 1
             max_end = tree_size - 1
+
+            end_list = await get_end_list_by_lob_name(db, log_name, min_completed_end)
+            logger.info(f"[next_task] end_list for {log_name}: {end_list}")
 
             while i <= max_end:
                 res = await find_next_task(ct_log_url, db, end_list, i, log_name, worker_name)
                 if res:
                     return res
-                continue
+                i += BATCH_SIZE
             # end for log_name
         # If all logs are collected, return sleep instruction to worker
         return {"message": "all logs completed", "sleep_sec": 120}
@@ -193,10 +197,26 @@ async def get_next_task(
     # return job
 
 
-async def get_end_list_by_lob_name(db, log_name):
-    # Get distinct end values for this log (sorted ascending)
+_min_completed_end_cache = TTLCache(maxsize=256, ttl=LOG_FETCH_PROGRESS_TTL)
+
+@cached(_min_completed_end_cache)
+async def get_min_completed_end(db, log_name, category):
+    from .models import LogFetchProgress
+    stmt = select(LogFetchProgress.min_completed_end).where(
+        LogFetchProgress.log_name == log_name,
+        LogFetchProgress.category == category
+    )
+    row = (await db.execute(stmt)).first()
+    return row[0] if row and row[0] is not None else None
+
+async def get_end_list_by_lob_name(db, log_name, min_end=None):
+    # Get distinct end values for this log (sorted ascending), optionally only those > min_end
+    from sqlalchemy import and_
+    q = [WorkerStatus.log_name == log_name]
+    if min_end is not None:
+        q.append(WorkerStatus.end > min_end)
     end_stmt = select(WorkerStatus.end).where(
-        WorkerStatus.log_name == log_name
+        and_(*q)
     ).distinct().order_by(WorkerStatus.end.asc())
     end_results = (await db.execute(end_stmt)).all()
     end_list = [row[0] for row in end_results]
