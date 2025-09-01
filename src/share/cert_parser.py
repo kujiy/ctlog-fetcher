@@ -143,8 +143,7 @@ class JPCertificateParser:
         cert_data.update(self._extract_jp_specific_info(certificate, domains))
         cert_data.update(self._extract_technical_info(certificate))
 
-        ## TODO: ct_log_timestampをDateTimeで保存するようにDB側を変更する
-        # cert_data['ct_log_timestamp'] = ct_log_timestamp
+        cert_data['ct_log_timestamp'] = ct_log_timestamp
         cert_data['subject_alternative_names'] = json.dumps(domains)
         cert_data['san_count'] = len(domains)
         cert_data['is_precertificate'] = (entry_type == 1)

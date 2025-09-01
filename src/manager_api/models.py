@@ -21,7 +21,7 @@ class Cert(Base):
     public_key_algorithm = Column(String(64))
     key_size = Column(Integer)
     signature_algorithm = Column(String(128))
-    ct_log_timestamp = Column(String(64))
+    ct_log_timestamp = Column(DateTime)
     crl_urls = Column(String(2048))
     ocsp_urls = Column(String(2048))
     vetting_level = Column(String(8))  # 'dv', 'ov', 'ev'
@@ -141,7 +141,7 @@ class UniqueCert(Base):
     public_key_algorithm = Column(String(64))
     key_size = Column(Integer)
     signature_algorithm = Column(String(128))
-    ct_log_timestamp = Column(String(64))   # TODO: Change to DateTime
+    ct_log_timestamp = Column(DateTime)   # TODO: Changed to DateTime
     crl_urls = Column(String(2048))
     ocsp_urls = Column(String(2048))
     vetting_level = Column(String(8))
