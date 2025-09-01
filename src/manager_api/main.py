@@ -379,7 +379,7 @@ async def get_logs_summary(db=Depends(get_async_session)):
     fetched_rate = (fetched_tree_size / total_tree_size) if total_tree_size > 0 else 0
 
     # --- ETA (days) ---
-    today = dt.date(2025, 8, 24)
+    today = ETA_BASE_DATE
     now = dt.datetime.now(JST).date()
     days_elapsed = (now - today).days if (now - today).days > 0 else 1
     eta_days = None
