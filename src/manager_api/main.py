@@ -3,11 +3,13 @@ import random
 import logging
 import os
 import json
-
-from fastapi import FastAPI, Query, Depends, Request
+import time
+from fastapi import FastAPI, Query, Depends, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from typing import List
+
+from .metrics import LatencySamplingMiddleware
 from .models import CTLogSTH, WorkerLogStat, WorkerStatus, Cert, LogFetchProgress
 from src.share.cert_parser import JPCertificateParser
 from sqlalchemy import func, and_, select
@@ -23,6 +25,7 @@ import datetime as dt
 from ..share.animal import get_worker_emoji
 from cachetools import TTLCache
 from asyncache import cached
+from prometheus_client import CollectorRegistry, multiprocess, generate_latest, CONTENT_TYPE_LATEST
 
 # background jobs
 from .background_jobs.sth_fetcher import start_sth_fetcher
@@ -44,6 +47,25 @@ Like communicating with a spaceship, it is desirable to set the interval to seve
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 logger = app.logger = logging.getLogger("manager_api")
+app.add_middleware(LatencySamplingMiddleware)
+
+
+@app.get("/metrics")
+def metrics() -> Response:
+    """
+    multiprocess対応のメトリクス出力。
+    uvicorn --workers N のときは必ず MultiProcessCollector で集約する。
+    """
+    registry = CollectorRegistry()
+    multiprocess.MultiProcessCollector(registry)
+    return Response(generate_latest(registry), media_type=CONTENT_TYPE_LATEST)
+
+# --- サンプル ---
+@app.get("/work/{n}")
+def work(n: int):
+    time.sleep(n / 10)  # n=100 → 10秒
+    return {"slept": n/10}
+
 
 @app.middleware("http")
 async def store_request_body(request: Request, call_next):
