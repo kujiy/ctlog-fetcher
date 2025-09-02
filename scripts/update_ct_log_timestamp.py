@@ -27,7 +27,7 @@ DB_NAME = os.getenv("MYSQL_DATABASE", "ct")
 
 BATCH_SIZE = 10
 TOTAL_ROWS = 2720000
-SECONDS_IN_WEEK = 7 * 24 * 60 * 60
+SECONDS_IN_WEEK = 24 * 60 * 60 #* 7
 SLEEP_PER_BATCH = SECONDS_IN_WEEK / (TOTAL_ROWS / BATCH_SIZE)  # ~19 seconds
 
 logging.basicConfig(
