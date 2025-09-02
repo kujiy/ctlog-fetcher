@@ -179,8 +179,8 @@ _min_completed_end_cache = TTLCache(maxsize=256, ttl=LOG_FETCH_PROGRESS_TTL)
 @cached(_min_completed_end_cache)
 async def get_min_completed_end(db, log_name, category):
     stmt = select(LogFetchProgress.min_completed_end).where(
-        LogFetchProgress.log_name == log_name,
-        LogFetchProgress.category == category
+        LogFetchProgress.category == category,
+        LogFetchProgress.log_name == log_name
     )
     row = (await db.execute(stmt)).first()
     return row[0] if row and row[0] is not None else None
