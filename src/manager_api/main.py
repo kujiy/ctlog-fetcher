@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from .db import get_async_session, init_engine
 from datetime import datetime, timedelta, timezone
 import asyncio
+from collections import defaultdict
 from src.share.job_status import JobStatus
 from .certificate_cache import cert_cache
 from ..config import CT_LOG_ENDPOINTS, BACKGROUND_JOBS_ENABLED, ETA_BASE_DATE, LOG_FETCH_PROGRESS_TTL, WORKER_CTLOG_REQUEST_INTERVAL_SEC, WORKER_PING_INTERVAL_SEC
@@ -38,6 +39,15 @@ from .background_jobs.log_fetch_progress import start_log_fetch_progress
 JST = timezone(timedelta(hours=9))
 
 BATCH_SIZE = 16000
+
+
+"""
+`locks = defaultdict(asyncio.Lock)` と宣言すると、`locks[lock_key]` で未登録のキーにアクセスした際、自動的に `asyncio.Lock()` のインスタンスが生成され、そのキーに紐付けて返されます。
+これは `collections.defaultdict` の仕様で、コンストラクタに渡した関数（ここでは `asyncio.Lock`）が「デフォルトファクトリ」として使われるためです。
+"""
+# 4-tuple key: (worker_name, log_name, start, end)
+locks = defaultdict(asyncio.Lock)
+
 
 """
 # Interval (seconds) at which the worker accesses the CT log
@@ -93,8 +103,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content=response_content,
     )
 
-lock = asyncio.Lock()
-
 
 @app.on_event("startup")
 async def on_startup():
@@ -125,7 +133,8 @@ async def get_next_task(
     category: str = Query(...),
     db=Depends(get_async_session)
 ):
-    async with lock:
+    # worker_name, category単位でロック
+    async with locks[(worker_name, category)]:
         if category not in CT_LOG_ENDPOINTS:
             return {"message": f"Invalid category: {category}"}
 
@@ -552,7 +561,8 @@ async def get_worker_ranking(db=Depends(get_async_session)):
 
 
 async def update_worker_status_and_summary(data: WorkerPingModel | WorkerPingBaseModel, db, status_value):
-    async with lock:
+    lock_key = (data.worker_name, data.log_name, data.start, data.end)
+    async with locks[lock_key]:
         ws_stmt = select(WorkerStatus).where(
             WorkerStatus.log_name==data.log_name,
             WorkerStatus.start==data.start,
@@ -608,7 +618,8 @@ async def worker_completed(data: WorkerPingBaseModel, db=Depends(get_async_sessi
 # resume_request: only when abnormal termination
 @app.post("/api/worker/resume_request")
 async def worker_resume_request(data: WorkerResumeRequestModel, db=Depends(get_async_session)):
-    async with lock:
+    lock_key = (data.worker_name, data.log_name, data.start, data.end)
+    async with locks[lock_key]:
         ws_stmt = select(WorkerStatus).where(
             WorkerStatus.log_name==data.log_name,
             WorkerStatus.start==data.start,
