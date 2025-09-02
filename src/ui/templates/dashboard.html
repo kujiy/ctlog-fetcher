@@ -35,7 +35,7 @@
     </div>
 
     <section>
-        <!-- Summary Section 数字は３桁ごとにカンマをつけて表示-->
+        <!-- Summary Section: Numbers are displayed with commas every three digits -->
         <b>Cumulative Fetched Certs:</b> {{ "{:,}".format(summary.total) }} |
         <b>Cumulative Worker Names</b> {{ summary.cumulative_worker_names }} |
         <b>Active Workers:</b> {{ "{:,}".format(summary.workers) }} &nbsp;|
@@ -103,7 +103,7 @@
 {#            {% endfor %}#}
         </table>
         {% else %}
-        <p>ランキング情報を取得できませんでした。</p>
+        <p>Could not retrieve ranking information.</p>
         {% endif %}
     </div>
 

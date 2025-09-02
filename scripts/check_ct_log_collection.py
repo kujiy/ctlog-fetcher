@@ -7,6 +7,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from src.manager_api.db import get_async_session
 from src.manager_api.models import CTLogSTH, WorkerStatus
 from sqlalchemy import desc, func
+from src.manager_api.main import BATCH_SIZE
+
 
 async def main():
     async for session in get_async_session():
@@ -30,10 +32,9 @@ async def main():
                 continue
             tree_size = latest_sth.tree_size
 
-            # --- /next_taskのバッチ進捗ロジックを流用 ---
-            from src.manager_api.main import BATCH_SIZE
+            # reuse the logic from /next_task
 
-            # log_name取得
+            # get log_name
             log_name_result = await session.execute(
                 WorkerStatus.__table__.select()
                 .with_only_columns([WorkerStatus.log_name])
@@ -47,7 +48,7 @@ async def main():
                 print(f"[{ct_log_url}] No log_name found.")
                 continue
 
-            # end_listを昇順で取得
+            # get end_list and sort ascending
             end_results = await session.execute(
                 WorkerStatus.__table__.select()
                 .with_only_columns([WorkerStatus.end])
@@ -57,7 +58,7 @@ async def main():
             )
             end_list = [row[0] for row in end_results.fetchall() if row[0] is not None]
 
-            # 連続して埋まっている最大endを探す
+            # search for the largest contiguous end
             i = BATCH_SIZE - 1
             max_end = tree_size - 1
             last_contiguous_end = -1
@@ -69,15 +70,15 @@ async def main():
                 else:
                     break
 
-            # 今どこまで収集済みか: 次に割り当てられるstart
+            # how much has been collected: the next start to be assigned
             next_start = last_contiguous_end + 1
 
-            # 収集完了判定: next_start > tree_size
+            # criteria for completion: next_start > tree_size
             is_complete = next_start > tree_size
 
             print(f"CT Log Endpoint: {ct_log_url}")
             print(f"  Latest tree_size: {tree_size}")
-            print(f"  Next start (収集済み): {next_start}")
+            print(f"  Next start (collected): {next_start}")
             print(f"  Next start > tree_size?: {is_complete}")
             print(f"  Collection complete?: {'YES' if is_complete else 'NO'}")
             print("")

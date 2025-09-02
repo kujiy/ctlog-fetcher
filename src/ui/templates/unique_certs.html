@@ -51,18 +51,18 @@
     <h1>🔒 Unique Certificates</h1>
 
     <div class="sample-note">
-        <strong>📋 サンプル表示について:</strong><br>
-        このページでは、certsテーブルからidの降順で最新100件の証明書をサンプルとして表示しています。重複がある可能性あります。
-        実際のデータベースには更に多くの証明書が格納されています。
+        <strong>📋 About the Sample Display:</strong><br>
+        This page displays the latest 100 certificates as samples from the certs table in descending order of id. There may be duplicates.
+        Many more certificates are stored in the actual database.
     </div>
 
     {% if error_message %}
         <div class="error">
-            <strong>⚠️ エラー:</strong> {{ error_message }}
+            <strong>⚠️ Error:</strong> {{ error_message }}
         </div>
     {% elif unique_certs_data %}
         <section>
-            <h2>証明書一覧 (最新 {{ unique_certs_data.count }} 件)</h2>
+            <h2>Certificate List (Latest {{ unique_certs_data.count }} entries)</h2>
 
             {% if unique_certs_data.unique_certs %}
                 <div style="overflow-x: auto;">
@@ -196,11 +196,11 @@
                     </table>
                 </div>
             {% else %}
-                <p>証明書データが見つかりませんでした。</p>
+                <p>No certificate data found.</p>
             {% endif %}
         </section>
     {% else %}
-        <p>データを読み込み中...</p>
+        <p>Loading data...</p>
     {% endif %}
 
     <div class="nav-links">

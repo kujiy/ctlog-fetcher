@@ -4,12 +4,9 @@ import logging
 import os
 import json
 
-from fastapi import Request
+from fastapi import FastAPI, Query, Depends, Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
-
-# FastAPIエントリポイント雛形
-from fastapi import FastAPI, Query, Depends
 from typing import List
 from .models import CTLogSTH, WorkerLogStat, WorkerStatus, Cert, UploadStat, UniqueCert
 from src.share.cert_parser import JPCertificateParser
@@ -20,17 +17,19 @@ from datetime import datetime, timedelta, timezone
 import asyncio
 from src.share.job_status import JobStatus
 from .certificate_cache import cert_cache
-# --- バックグラウンドジョブ起動 ---
-from .background_jobs.sth_fetcher import start_sth_fetcher
-from .background_jobs.worker_liveness import start_worker_liveness_monitor
-from .background_jobs.unique_certs_counter import start_unique_certs_counter, get_unique_certs_count
-from .background_jobs.log_fetch_progress import start_log_fetch_progress
 from ..config import CT_LOG_ENDPOINTS, BACKGROUND_JOBS_ENABLED, ETA_BASE_DATE, LOG_FETCH_PROGRESS_TTL, WORKER_CTLOG_REQUEST_INTERVAL_SEC, WORKER_PING_INTERVAL_SEC
 from .base_models import WorkerPingModel, WorkerPingBaseModel, WorkerResumeRequestModel, UploadCertItem, WorkerErrorModel
 import datetime as dt
 from ..share.animal import get_worker_emoji
 from cachetools import TTLCache
 from asyncache import cached
+
+# background jobs
+from .background_jobs.sth_fetcher import start_sth_fetcher
+from .background_jobs.worker_liveness import start_worker_liveness_monitor
+from .background_jobs.unique_certs_counter import start_unique_certs_counter, get_unique_certs_count
+from .background_jobs.log_fetch_progress import start_log_fetch_progress
+
 
 # JST timezone
 JST = timezone(timedelta(hours=9))
@@ -96,8 +95,6 @@ async def on_shutdown():
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
     logger.info("Background jobs cancelled on shutdown")
-
-# launch_background_jobsは不要になるため削除
 
 
 @app.get("/api/worker/next_task")
@@ -496,7 +493,7 @@ async def get_workers_status(db=Depends(get_async_session)):
     }
 
 
-# ワーカーごとのランキングAPI
+# ranking of workers by total fetched count and .jp count
 @app.get("/api/worker_ranking")
 async def get_worker_ranking(db=Depends(get_async_session)):
     stmt = select(
@@ -551,7 +548,7 @@ async def update_worker_status_and_summary(data: WorkerPingModel | WorkerPingBas
             ws.jp_count = data.jp_count
             ws.jp_ratio = data.jp_ratio
             await db.commit()
-            # --- サマリーテーブル更新 ---
+            # update the summary table
             stat_stmt = select(WorkerLogStat).where(
                 WorkerLogStat.log_name==ws.log_name,
                 WorkerLogStat.worker_name==ws.worker_name
@@ -560,7 +557,7 @@ async def update_worker_status_and_summary(data: WorkerPingModel | WorkerPingBas
             if not stat:
                 stat = WorkerLogStat(log_name=ws.log_name, worker_name=ws.worker_name)
                 db.add(stat)
-            # completed APIのみでjp_count_sumを加算する
+            # Add jp_count_sum only when status is COMPLETED
             if status_value == JobStatus.COMPLETED.value:
                 stat.worker_total_count = (stat.worker_total_count or 0) + (data.end - data.start + 1)
                 stat.jp_count_sum = (stat.jp_count_sum or 0) + (ws.jp_count or 0)
@@ -570,10 +567,10 @@ async def update_worker_status_and_summary(data: WorkerPingModel | WorkerPingBas
 
 
 """
-workerはfailed_filesとpending_filesの数をクエリパラメータとして付与します。
-これらのクエリパラメータはAPIサーバ側では一切処理されません。アクセスログ用途のみです。
+a worker has failed_files and pending_files as query parameters.
+These query parameters are not processed by the API server at all. They are only for access log purposes.
 """
-# ping: runningのみ
+# ping: only running
 @app.post("/api/worker/ping")
 async def worker_ping(data: WorkerPingModel, db=Depends(get_async_session)):
     await update_worker_status_and_summary(data, db, JobStatus.RUNNING.value)
@@ -582,12 +579,12 @@ async def worker_ping(data: WorkerPingModel, db=Depends(get_async_session)):
         "ctlog_request_interval_sec": WORKER_CTLOG_REQUEST_INTERVAL_SEC
     }
 
-# completed: job完了時のみ
+# completed: when a job is completed
 @app.post("/api/worker/completed")
 async def worker_completed(data: WorkerPingBaseModel, db=Depends(get_async_session)):
     return await update_worker_status_and_summary(data, db, JobStatus.COMPLETED.value)
 
-# resume_request: 異常終了時のみ
+# resume_request: only when abnormal termination
 @app.post("/api/worker/resume_request")
 async def worker_resume_request(data: WorkerResumeRequestModel, db=Depends(get_async_session)):
     async with lock:
@@ -608,7 +605,7 @@ async def worker_resume_request(data: WorkerResumeRequestModel, db=Depends(get_a
 
 @app.post("/api/worker/error")
 async def worker_error(data: WorkerErrorModel):
-    # worker_errors.logに追記（JSON Lines形式）
+    # Add to worker_errors.log (JSON Lines format)
     log_path = os.path.join(os.path.dirname(__file__), "worker_errors.log")
     try:
         with open(log_path, "a") as f:
@@ -633,7 +630,7 @@ async def get_worker_categories():
     """
     all_categories = list(CT_LOG_ENDPOINTS.keys())
 
-    # 例: google3本, 他1本ずつ
+    # e.g. google 3, digicert 1, cloudflare 1, letsencrypt 1, trustasia 1
     ordered_categories = []
     ordered_categories.extend(["google"] * 3)
     ordered_categories.extend(["digicert"] * 1)

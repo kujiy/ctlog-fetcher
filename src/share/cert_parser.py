@@ -33,8 +33,8 @@ except ImportError as e:
 
 # Suppress UserWarning about attribute length (number at end varies)
 """
-Common nameはRFC 5280で最大64文字までと定義されているが、実際はそれ以上使われているので警告を抑制する
-/Users/jp23223/repos/ct/src/share/cert_parser.py:163: UserWarning: Attribute's length must be >= 1 and <= 64, but it was 89
+Common Name (CN) is defined in RFC 5280 to be a maximum of 64 characters, but in practice, it is used beyond that, so suppress the warning.
+repos/ct/src/share/cert_parser.py:163: UserWarning: Attribute's length must be >= 1 and <= 64, but it was 89
   for attribute in certificate.subject:
 """
 warnings.filterwarnings(
@@ -178,7 +178,7 @@ class JPCertificateParser:
 
         # Extract the entry type (2 bytes at offset 10)
         entry_type = int.from_bytes(leaf_data[10:12], byteorder='big')
-        # leaf_inputの2:10バイト目から8バイトがtimestamp
+        # 2:10 bytes in leaf_input is the timestamp (8 bytes)
         ct_log_timestamp_ms = int.from_bytes(leaf_data[2:10], byteorder='big')
         ct_log_timestamp = datetime.fromtimestamp(ct_log_timestamp_ms / 1000, tz=timezone.utc)
 
@@ -220,7 +220,7 @@ class JPCertificateParser:
                 """
                 eku = certificate.extensions.get_extension_for_oid(ExtensionOID.EXTENDED_KEY_USAGE).value
         except ExtensionNotFound:
-            # EKUがない証明書はスルー。2020年以降のweb server用証明書はEKU必須
+            # skip a cert without EKU. Since 2020, EKU is mandatory for web server certs.
             return None, entry_type, ct_log_timestamp
         except Exception as e:
             error_msg = str(e)

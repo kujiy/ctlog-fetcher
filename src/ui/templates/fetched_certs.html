@@ -51,18 +51,18 @@
     <h1>🔒 Fetched Certificates by Worker: {{ worker_name }}</h1>
 
     <div class="sample-note">
-        <strong>📋 Worker証明書表示について:</strong><br>
-        このページでは、{{ worker_name }}によって取得されたcertsテーブルからidの降順で最新100件の証明書をサンプルとして表示しています。
-        実際のデータベースには更に多くの証明書が格納されている可能性があります。
+        <strong>📋 About Worker Certificate Display:</strong><br>
+        This page displays the latest 100 certificates (sorted by descending id) fetched by {{ worker_name }} from the certs table as a sample.
+        There may be many more certificates stored in the actual database.
     </div>
 
     {% if error_message %}
         <div class="error">
-            <strong>⚠️ エラー:</strong> {{ error_message }}
+            <strong>⚠️ Error:</strong> {{ error_message }}
         </div>
     {% elif fetched_certs_data %}
         <section>
-            <h2>証明書一覧 (最新 {{ fetched_certs_data.count }} 件)</h2>
+            <h2>Certificate List (Latest {{ fetched_certs_data.count }} items)</h2>
 
             {% if fetched_certs_data.certs %}
                 <div style="overflow-x: auto;">
@@ -196,11 +196,11 @@
                     </table>
                 </div>
             {% else %}
-                <p>証明書データが見つかりませんでした。</p>
+                <p>No certificate data found.</p>
             {% endif %}
         </section>
     {% else %}
-        <p>データを読み込み中...</p>
+        <p>Loading data...</p>
     {% endif %}
 
     <div class="nav-links">

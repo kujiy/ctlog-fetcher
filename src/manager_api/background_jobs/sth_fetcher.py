@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime
 from ..models import CTLogSTH
-from ...config import CT_LOG_ENDPOINTS
+from ...config import CT_LOG_ENDPOINTS, STH_FETCH_INTERVAL_SEC
 from ..db import get_async_session
 import aiohttp
 import logging
@@ -67,7 +67,7 @@ async def fetch_and_store_sth():
                                 )
                             )
                         await session.commit()
-            await asyncio.sleep(60)  # 5分ごと
+            await asyncio.sleep(STH_FETCH_INTERVAL_SEC)  # interval between fetches
     except asyncio.CancelledError:
         # Graceful shutdown
         return

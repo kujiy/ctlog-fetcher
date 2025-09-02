@@ -1,6 +1,6 @@
 """
-Certs tableの重複が多く処理が重くなったので、重複を削除するスクリプト
-issuer, serial_number, certificate_fingerprint_sha256の組み合わせが同じレコードを削除する
+Certs table has many duplicates and processing has become heavy, so this script deletes duplicates.
+Deletes records with the same combination of issuer, serial_number, and certificate_fingerprint_sha256.
 """
 #!/usr/bin/env python3
 import sys
@@ -8,7 +8,7 @@ import os
 import time
 import asyncio
 
-# src/manager_api/db.pyとmodels.pyをimportするためのパス追加
+# Add path to import src/manager_api/db.py and models.py
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from src.manager_api.db import get_async_session
