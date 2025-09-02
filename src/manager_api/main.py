@@ -110,7 +110,7 @@ async def get_next_task(
         endpoints = CT_LOG_ENDPOINTS[category]
         # endpoints = [("xenon2022", "https://ct.googleapis.com/logs/xenon2022/")]  # debug
 
-        logger.info(f"[next_task] category={category} endpoints={endpoints}")
+        # logger.info(f"[next_task] category={category} endpoints={endpoints}")
 
         random.shuffle(endpoints)
 
@@ -128,11 +128,11 @@ async def get_next_task(
                 i = BATCH_SIZE - 1
             max_end = tree_size - 1
 
-            end_list = await get_end_listby_lob_name_with_running_or_completed(db, log_name, min_completed_end)
-            logger.info(f"[next_task] end_list for {log_name}: {end_list}")
+            end_set = await get_end_listby_lob_name_with_running_or_completed(db, log_name, min_completed_end)
+            # logger.info(f"[next_task] end_set for {log_name}: {end_set}")
 
             while i <= max_end:
-                res = await find_next_task(ct_log_url, db, end_list, i, log_name, worker_name)
+                res = await find_next_task(ct_log_url, db, end_set, i, log_name, worker_name)
                 if res:
                     return res
                 i += BATCH_SIZE
@@ -197,12 +197,12 @@ async def get_end_listby_lob_name_with_running_or_completed(db, log_name, min_en
         and_(*q)
     ).distinct().order_by(WorkerStatus.end.asc())
     end_results = (await db.execute(end_stmt)).all()
-    end_list = [row[0] for row in end_results]
-    return end_list
+    end_set = set(row[0] for row in end_results)
+    return end_set
 
 
-async def find_next_task(ct_log_url, db, end_list, i, log_name, worker_name):
-    if i in end_list:
+async def find_next_task(ct_log_url, db, end_set, i, log_name, worker_name):
+    if i in end_set:
         return None
     else:
         start = i - BATCH_SIZE + 1

@@ -105,6 +105,8 @@ class WorkerStatus(Base):
         Index('idx_worker_last_ping', 'last_ping'),
         # For status filtering (resume_wait queries)
         Index('idx_worker_status', 'status'),
+        # CREATE INDEX idx_workerstatus_logname_status_end ON worker_status (log_name, status, end);
+        Index('idx_worker_status_logname_status_end', 'log_name', 'status', 'end'),
     )
 
 
