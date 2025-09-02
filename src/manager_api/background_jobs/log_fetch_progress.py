@@ -5,10 +5,7 @@ from src.manager_api.models import WorkerStatus, CTLogSTH, LogFetchProgress
 from src.config import CT_LOG_ENDPOINTS, LOG_FETCH_PROGRESS_TTL
 from src.manager_api.db import get_async_session
 from src.share.job_status import JobStatus
-
-import logging
-
-logger = logging.getLogger("log_fetch_progress")
+from src.share.logger import logger
 
 BATCH_SIZE = 16000
 
@@ -24,7 +21,7 @@ async def aggregate_log_fetch_progress():
                 logger.info(now.isoformat())
                 for category, endpoints in CT_LOG_ENDPOINTS.items():
                     for log_name, ct_log_url in endpoints:
-                        logger.info(f"Fetching {log_name} progress from {ct_log_url}")
+                        logger.debug(f"Fetching {log_name} progress from {ct_log_url}")
                         # Get latest STH for this log_name
                         sth_end = await sth_by_log_name(log_name, session)
 
@@ -35,8 +32,12 @@ async def aggregate_log_fetch_progress():
                                 i = min_completed_end + BATCH_SIZE
                             else:
                                 i = BATCH_SIZE - 1
+                            # 高速化: 一括でcompletedなend値を取得し、Python側で処理
+                            completed_ends = await get_all_completed_worker_ends(log_name, session)
+                            # completed_endsをsetにしてBATCH_SIZEごとに探索
+                            completed_ends_set = set(completed_ends)
                             while i <= sth_end:
-                                if await get_completed_worker_status(i, log_name, session):
+                                if i in completed_ends_set:
                                     min_completed_end = i
                                     i += BATCH_SIZE
                                 else:
@@ -50,7 +51,7 @@ async def aggregate_log_fetch_progress():
                         # Upsert into LogFetchProgress
                         await upcert_log_fetch_progress(category, fetch_rate, log_name, min_completed_end, now, session,
                                                         status, sth_end)
-                        logger.info(f"Updated {log_name} progress from {ct_log_url} as min_completed_end={min_completed_end}, sth_end={sth_end}, fetch_rate={fetch_rate}, status={status}")
+                        logger.debug(f"Updated {log_name} progress from {ct_log_url} as min_completed_end={min_completed_end}, sth_end={sth_end}, fetch_rate={fetch_rate}, status={status}")
             await asyncio.sleep(LOG_FETCH_PROGRESS_TTL)
     except asyncio.CancelledError:
         # Graceful shutdown
@@ -122,6 +123,15 @@ async def get_completed_worker_status(i, log_name, session):
     )
     completed = (await session.execute(stmt)).scalars().first()
     return completed
+
+# 新規: 一括取得
+async def get_all_completed_worker_ends(log_name, session):
+    stmt = select(WorkerStatus.end).where(
+        WorkerStatus.log_name == log_name,
+        WorkerStatus.status == JobStatus.COMPLETED.value
+    )
+    result = await session.execute(stmt)
+    return [row[0] for row in result.fetchall()]
 
 
 def start_log_fetch_progress():
