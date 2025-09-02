@@ -8,7 +8,7 @@ from fastapi import FastAPI, Query, Depends, Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from typing import List
-from .models import CTLogSTH, WorkerLogStat, WorkerStatus, Cert, UploadStat, UniqueCert
+from .models import CTLogSTH, WorkerLogStat, WorkerStatus, Cert, LogFetchProgress
 from src.share.cert_parser import JPCertificateParser
 from sqlalchemy import func, and_, select
 from sqlalchemy.exc import IntegrityError
@@ -178,7 +178,6 @@ _min_completed_end_cache = TTLCache(maxsize=256, ttl=LOG_FETCH_PROGRESS_TTL)
 
 @cached(_min_completed_end_cache)
 async def get_min_completed_end(db, log_name, category):
-    from .models import LogFetchProgress
     stmt = select(LogFetchProgress.min_completed_end).where(
         LogFetchProgress.log_name == log_name,
         LogFetchProgress.category == category
