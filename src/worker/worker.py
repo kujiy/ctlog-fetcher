@@ -20,6 +20,7 @@ import signal
 import traceback
 import re
 import datetime
+import urllib.parse
 from src.config import CT_LOG_ENDPOINTS, WORKER_THREAD_MANAGER_INTERVAL_SEC
 from collections import Counter
 
@@ -375,7 +376,7 @@ def retry_manager_unified(args):
 
 
 
-def handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, task_ref):
+def handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, task_ref, args=None):
     status = None
     jobkey = None
     if last_job:
@@ -397,7 +398,9 @@ def handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, task_re
             task_ref[0] = resume_task
             return True, 0, resume_task
         else:
-            # 完了jobなら次範囲job生成
+            # 完了jobなら次範囲job生成前にDNSチェック
+            if args is not None:
+                wait_for_manager_api_ready(args.manager)
             next_start = last_job["end"] + 1
             next_end = last_job["end"] + batch_size
             logger.warning(f"{category}: API失敗/例外が{fail_count}回続いたので次範囲jobを自律生成 (next range: {next_start}-{next_end}): 自律復帰成功 ✅")
@@ -454,7 +457,7 @@ def category_job_manager(category, args, global_tasks, my_stop_event):
                     sleep_with_stop_check(2, my_stop_event)
 
                     # 何回か試して、ダメならtask自律生成
-                    result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, [task])
+                    result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, [task], args)
                     if result:
                         # task 自律生成
                         task = last_job.copy()
@@ -465,7 +468,7 @@ def category_job_manager(category, args, global_tasks, my_stop_event):
                 logger.debug(f"[{category}] Communication error getting next_task. The manager api might have been down. : {e}")
                 fail_count += 1
                 sleep_with_stop_check(1, my_stop_event)
-                result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, [task])
+                result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, [task], args)
                 if result:
                     task = last_job.copy()
                 else:
@@ -481,7 +484,7 @@ def category_job_manager(category, args, global_tasks, my_stop_event):
                 )
                 fail_count += 1
                 sleep_with_stop_check(1, my_stop_event)
-                result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, [task])
+                result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, [task], args)
                 if result:
                     task = last_job.copy()
                 else:
@@ -559,8 +562,22 @@ def category_thread_manager(args, executor, category_thread_info):
     register_stop_event()
 
     my_stop_event = get_stop_event()
+    last_desired_counts = DEFAULT_CATEGORIES.copy()
+    last_all_categories = list(DEFAULT_CATEGORIES.keys())
     while not my_stop_event.is_set():
-        desired_counts, all_categories = fetch_categories(args.manager)
+        try:
+            desired_counts, all_categories = fetch_categories(args.manager)
+            # Only update if fetch_categories succeeded (i.e., did not fall back to DEFAULT_CATEGORIES)
+            if desired_counts != DEFAULT_CATEGORIES:
+                last_desired_counts = desired_counts
+                last_all_categories = all_categories
+        except Exception:
+            # On any error, keep using last successful values
+            pass
+
+        # Use last successful values
+        desired_counts = last_desired_counts
+        all_categories = last_all_categories
 
         # 現在のスレッド状態を取得
         running_counts = {}
@@ -984,6 +1001,28 @@ def get_my_ip():
     #     return "unknown"
 
 
+
+# --- Startup manager API connectivity check ---
+"""
+APIを止めた時、workerが無駄にCT Log apiにアクセスし続けるのを止める。
+そのスイッチはapiのDNS recordを消した時にする
+"""
+def wait_for_manager_api_ready(manager_url):
+    INTERVAL = 180
+    parsed = urllib.parse.urlparse(manager_url)
+    while True:
+        try:
+            # DNS resolution
+            socket.gethostbyname(parsed.hostname)
+        except Exception as e:
+            logger.warning(f"[startup-check] The manager api seems unreachable. Retrying in 180s.")
+            time.sleep(INTERVAL)
+            continue
+        logger.debug(f"[startup-check] manager-api's DNS resolution succeeded.")
+        break
+        
+
+
 global_tasks = {}
 command_description = '''CT Log Fetcher
 
@@ -1067,6 +1106,9 @@ if __name__ == '__main__':
     # print args line by line
     for k, v in vars(args).items():
         print(f"{k}: {v}")
+
+
+    wait_for_manager_api_ready(args.manager)
 
     try:
         main(args)
