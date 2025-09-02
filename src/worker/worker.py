@@ -292,7 +292,7 @@ def send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded
     }
     url = f"{args.manager}/api/worker/completed"
     try:
-        resp = requests.post(url, json=completed_data, timeout=10)
+        resp = requests.post(url, json=completed_data, timeout=180)
         if resp.status_code != 200:
             # Log detailed API response for debugging
             logger.debug(f"[worker] failed to send completed api: status={resp.status_code}")
@@ -336,9 +336,9 @@ def process_pending_requests_files(args, file_glob="pending_*.json"):
 
             logger.debug(f"[retry] Attempting to resend: {req_file}")
             if method == "POST":
-                resp = requests.post(url, json=data, timeout=30)
+                resp = requests.post(url, json=data, timeout=180)
             elif method == "GET":
-                resp = requests.get(url, params=data, timeout=30)
+                resp = requests.get(url, params=data, timeout=180)
             else:
                 logger.warning(f"[retry] Unsupported method {method}: {req_file}")
                 continue
@@ -909,7 +909,7 @@ def upload_jp_certs(args, category, current, jp_certs, failed_lock):
     if jp_certs:
         url = f"{args.manager}/api/worker/upload"
         try:
-            resp = requests.post(url, json=jp_certs, timeout=30)
+            resp = requests.post(url, json=jp_certs, timeout=180)
             if resp.status_code == 200:
                 last_uploaded_index = current
             else:
