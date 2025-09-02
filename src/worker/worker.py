@@ -311,9 +311,9 @@ def send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded
 
 
 
-# --- retry管理専用スレッド ---
+# --- Dedicated retry management thread ---
 
-# 汎用リトライファイル処理
+# Generic retry file processing
 def process_pending_requests_files(args, file_glob="pending_*.json"):
     """
     Scan pending_*.json files and delete those whose requests succeed.
@@ -325,7 +325,7 @@ def process_pending_requests_files(args, file_glob="pending_*.json"):
                 req = json.load(f)
 
             url = req.get("url")
-            # urlに ?retry=1 または &retry=1 を付与してリトライであることを通知
+            # Add ?retry=1 or &retry=1 to the URL to indicate this is a retry
             url += f"&retry_del={deleted}" if '?' in url else f"?retry_del={deleted}"
 
             method = req.get("method", "POST").upper()
@@ -390,20 +390,21 @@ def handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, task_re
     if fail_count >= MAX_FAIL and last_job:
         batch_size = last_job["end"] - last_job["start"] + 1
         if status != JobStatus.COMPLETED.value:
-            # 未完了jobならresume
-            logger.warning(f"{category}: API失敗/例外が{fail_count}回続いたので未完了jobをresume (range: {last_job['start']}-{last_job['end']})")
+            # If the job is incomplete, resume
+            logger.warning(f"{category}: API failure/exception occurred {fail_count} times, resuming unfinished job (range: {last_job['start']}-{last_job['end']})")
             resume_task = last_job.copy()
             resume_task["current"] = resume_task["start"]
             resume_task["status"] = JobStatus.RUNNING.value
             task_ref[0] = resume_task
             return True, 0, resume_task
         else:
-            # 完了jobなら次範囲job生成前にDNSチェック
+            # If the job is complete, perform DNS check before generating the next range job
             if args is not None:
                 wait_for_manager_api_ready(args.manager)
             next_start = last_job["end"] + 1
             next_end = last_job["end"] + batch_size
-            logger.warning(f"{category}: API失敗/例外が{fail_count}回続いたので次範囲jobを自律生成 (next range: {next_start}-{next_end}): 自律復帰成功 ✅")
+            logger.warning(
+                f"{category}: API failure/exception occurred {fail_count} times, autonomously generating the next range job (next range: {next_start}-{next_end}): Autonomous recovery succeeded ✅")
             new_task = last_job.copy()
             new_task["start"] = next_start
             new_task["current"] = next_start
@@ -433,38 +434,38 @@ def category_job_manager(category, args, global_tasks, my_stop_event):
                 logger.debug(f"status_code: {resp.status_code}, body: {resp.text[:200]}")
                 if resp.status_code == 200:
                     task = resp.json()
-                    # 完了している場合
+                    # when the job is completed
                     if not task or "start" not in task:
-                        # APIが {"message": "all logs completed", "sleep_sec": ...} を返す場合に対応
+                        # support the case where the API returns {"message": "all logs completed", "sleep_sec": ...}
                         if isinstance(task, dict) and task.get("message") == "all logs completed":
                             sleep_sec = int(task.get("sleep_sec", 120))
-                            logger.info(f"{category}: 全log_name収集済み、{sleep_sec}秒sleep")
+                            logger.info(f"{category}: collected all log_names, sleeping for {sleep_sec} seconds")
                             sleep_with_stop_check(sleep_sec, my_stop_event)
                         else:
-                            logger.info(f"{category}想定外のAPI response: 次のjobなし、60秒待機")
+                            logger.info(f"{category}: unexpected API response: no next job, waiting 60 seconds")
                             sleep_with_stop_check(60, my_stop_event)
                         continue
 
-                    # 正常取得時はfail_countリセット
+                    # Reset fail_count on successful retrieval
                     fail_count = 0
-                    # next_task APIからctlog_request_interval_secを取得（なければ1）
+                    # Get ctlog_request_interval_sec from the next_task API (default to 1 if not present)
                     ctlog_request_interval_sec = int(task.get("ctlog_request_interval_sec", 1))
                     last_job = task.copy()
                 else:
                     logger.debug(f"{category}: failed to get next_task: {resp.status_code}")
                     fail_count += 1
-                    # 2秒待機。ただしstop_eventが立ったら即return
+                    # Wait for 2 seconds, but return immediately if stop_event is set
                     sleep_with_stop_check(2, my_stop_event)
 
-                    # 何回か試して、ダメならtask自律生成
+                    # Try several times, and if it still fails, generate the task autonomously
                     result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, [task], args)
                     if result:
-                        # task 自律生成
+                        # task autonomous generation
                         task = last_job.copy()
                     else:
                         continue
             except requests.exceptions.RequestException as e:
-                # 通信系エラーは想定内
+                # Communication errors are expected
                 logger.debug(f"[{category}] Communication error getting next_task. The manager api might have been down. : {e}")
                 fail_count += 1
                 sleep_with_stop_check(1, my_stop_event)
@@ -493,12 +494,12 @@ def category_job_manager(category, args, global_tasks, my_stop_event):
             if my_stop_event.is_set():
                 break
 
-            # カテゴリごとのworker_job_threadを生成する
+            # Generate a worker_job_thread for each category
             try:
                 completed_task = worker_job_thread(category, task, args, global_tasks, ctlog_request_interval_sec)
             except Exception as e:
                 tb = traceback.format_exc()
-                logger.error(f"[{category}] jobスレッド例外:\n{tb}")
+                logger.error(f"[{category}] Exception in job thread:\n{tb}")
                 report_worker_error(
                     args=args,
                     error_type="category_job_manager_jobthread_error",
@@ -535,11 +536,12 @@ def send_resume(info):
             "ip_address": info.get("ip_address")
         }, timeout=10)
     except Exception as e:
-        logger.debug(f"resume_request送信失敗: {e}")
+        logger.debug(f"Failed to send resume_request: {e}")
 
 
-# デフォルトはhostnameを和風word2単語+数字に変換、ニックネーム指定時はそのまま
+# By default, the hostname is converted to two Japanese-style words plus a number. If a nickname is specified, it is used as is.
 def default_worker_name():
+    # By default, convert the hostname to two Japanese-style words plus a number. If a nickname is specified, use it as is.
     hostname = socket.gethostname()
     words = ["pin",   "pon",   "chin",  "kan",   "pafu",  "doki",  "bata",  "kero",  "piyo",  "goro",  "fuwu",  "zun",   "kyu",   "pata",  "ponk", "boon"]
     h = int(hashlib.sha256(hostname.encode()).hexdigest(), 16)
@@ -553,7 +555,7 @@ def category_job_manager_with_wrapper(category, args, global_tasks, stop_event):
     category_job_manager(category, args, global_tasks, stop_event)
 
 
-# --- カテゴリ監視スレッド ---
+# --- Category Watcher Thread ---
 def category_thread_manager(args, executor, category_thread_info):
     """
     Periodically call /api/worker/categories and manage the increase/decrease of category threads.
@@ -579,7 +581,7 @@ def category_thread_manager(args, executor, category_thread_info):
         desired_counts = last_desired_counts
         all_categories = last_all_categories
 
-        # 現在のスレッド状態を取得
+        # Get the current state of threads
         running_counts = {}
         for (cat, idx), info in list(category_thread_info.items()):
             # info["thread"] is the return value of ThreadPoolExecutor.submit (Future)
@@ -600,7 +602,7 @@ def category_thread_manager(args, executor, category_thread_info):
         for cat, desired in desired_counts.items():    # e.g. google, digicert...
             running = running_counts.get(cat, 0)      # e.g. google needs 3 threads
             for i in range(running, desired):        # Start new threads as needed
-                # start the new thread for categories e.g. google, digicert
+                # Start new threads for categories such as google, digicert, etc.
                 stop_evt = threading.Event()
                 future = executor.submit(category_job_manager_with_wrapper, cat, args, global_tasks, stop_evt)
                 category_thread_info[(cat, i)] = {"thread": future, "stop_event": stop_evt}
@@ -624,18 +626,12 @@ def fetch_categories(domain: str):
         resp = requests.get(url, timeout=10)
         if resp.status_code == 200:
             data = resp.json()
-            # 新API: {"all_categories": [...], "ordered_categories": [...]}
-            if isinstance(data, dict) and "all_categories" in data and "ordered_categories" in data:
-                all_categories = data["all_categories"]
-                ordered_categories = data["ordered_categories"]
-                desired_counts = Counter(ordered_categories)
-                return desired_counts, all_categories
-            # 旧API: list
-            elif isinstance(data, list):
-                desired_counts = Counter(data)
-                all_categories = list(desired_counts.keys())
-                return desired_counts, all_categories
-        # エラー時
+            # current API: {"all_categories": [...], "ordered_categories": [...]}
+            all_categories = data["all_categories"]
+            ordered_categories = data["ordered_categories"]
+            desired_counts = Counter(ordered_categories)
+            return desired_counts, all_categories
+        # error
         desired_counts = DEFAULT_CATEGORIES
         all_categories = list(DEFAULT_CATEGORIES.keys())
     except Exception:
@@ -651,7 +647,8 @@ def main(args):
     executor = None
     futures = {}
 
-    # --- カテゴリスレッド管理用 ---
+    # --- Category thread management ---
+    # Dictionary for managing category threads: (category, idx): {"thread": future, "stop_event": event}
     category_thread_info = {}  # (category, idx): {"thread": future, "stop_event": event}
 
     def handle_terminate(signum, frame):
@@ -660,7 +657,7 @@ def main(args):
             return
         handle_terminate._called = True
 
-        # 全スレッドのstop_eventをset
+        # Set stop_event for all threads
         for ev in list(stop_events.values()):
             ev.set()
 
@@ -701,7 +698,7 @@ def main(args):
         retry_future = executor.submit(retry_wrapper, args)
         futures["retry_manager"] = retry_future
 
-        # カテゴリ監視スレッド起動
+        # start category watcher thread
         watcher_thread = threading.Thread(
             target=category_thread_manager,
             args=(args, executor, category_thread_info),
@@ -741,34 +738,34 @@ def get_console_refresh_time(start_time):
 
 
 def update_console_screen(args, handle_terminate, status_lines):
-    # top風進捗表示ループ
+    # Main loop for top-like progress display
     start_time = time.time()
     try:
         while True:
             sys.stdout.write(f"\033[{len(status_lines) + 1}F")  # Move cursor up to start position
 
-            # --- ここでworker名を常時表示 ---
+            # --- Always display the worker name here ---
             refresh_time = get_console_refresh_time(start_time)
             sys.stdout.write(f"\r[WorkerName] {args.worker_name} | Refresh: {refresh_time}s\033[K\n")
 
-            # status_linesの全キー（category-log_name）でループ
+            # Loop through all keys in status_lines (category-log_name)
             shown = set()
             for key, line in status_lines.items():
                 if '-' in key:
                     cat, log_name = key.split('-', 1)
                 else:
                     cat, log_name = key, ''
-                # 22文字+[]
+                # 22 chars + []
                 if log_name:
                     disp = f"{cat}: {log_name}"
                     cat_disp = f"[{disp:<22}]"
                 else:
                     cat_disp = f"[{cat:<22}]"
-                # 先頭カテゴリ名を置換
+                # Replace the first category name
                 line_disp = re.sub(r"^\[.*?\]", cat_disp, line)
                 sys.stdout.write(f"\r{line_disp}\033[K\n")
                 shown.add(cat)
-            # 表示されていないカテゴリはwaiting...で埋める
+            # Fill in categories not displayed with 'waiting...'
             for cat in ordered_categories:
                 if cat not in shown:
                     cat_disp = f"[{cat:<22}]"
@@ -781,7 +778,7 @@ def update_console_screen(args, handle_terminate, status_lines):
 
 
 def update_console_message(status_lines, category, log_name, req_count, current, worker_jp_count, worker_total_count, end, task, start_time, omikuji, retry_count):
-    # status_linesのサイズが大きくなりすぎたらクリア
+    # Clear status_lines if it gets too large
     if len(status_lines) > MAX_CONSOLE_LINES:
         status_lines.clear()
 
@@ -814,7 +811,7 @@ def update_console_message(status_lines, category, log_name, req_count, current,
         face = "😩"
     status_key = f"{category}-{log_name}"
     status_lines[status_key] = (
-        f"[{category}] 🌐 Req: {req_count} | 📍 Index: {current} | 🇯🇵 Domain: {worker_jp_count}({jp_ratio*100:.2f}%) | Progress: {progress_pct:.2f}% | ⏱️ ETA: {eta_str} {face} | おみくじ: {omikuji}{retry_str}"
+        f"[{category}] 🌐 Req: {req_count} | 📍 Index: {current} | 🇯🇵 Domain: {worker_jp_count}({jp_ratio*100:.2f}%) | Progress: {progress_pct:.2f}% | ⏱️ ETA: {eta_str} {face} | {omikuji}{retry_str}"
     )
 
 def report_worker_error(args, error_type, error_message, traceback_str, entry=None, log_name=None, ct_log_url=None, ct_index=None):
@@ -890,6 +887,7 @@ def extract_jp_certs(entries, log_name, ct_log_url, args, my_ip, current):
 
 
 # --- JP certs filter for uniqueness ---
+# Remove duplicate JP certificates
 def filter_jp_certs_unique(jp_certs):
     seen = set()
     filtered = []
@@ -905,6 +903,7 @@ def filter_jp_certs_unique(jp_certs):
     return filtered
 
 # --- upload_jp_certs: moved above worker_job_thread ---
+# Upload JP certificates to the manager API
 def upload_jp_certs(args, category, current, jp_certs, failed_lock):
     last_uploaded_index = None
     if jp_certs:
@@ -914,7 +913,7 @@ def upload_jp_certs(args, category, current, jp_certs, failed_lock):
             if resp.status_code == 200:
                 last_uploaded_index = current
             else:
-                logger.warning(f"[{category}] upload失敗: {resp.status_code} {resp.text}")
+                logger.warning(f"[{category}] Upload failed: {resp.status_code} {resp.text}")
                 with failed_lock:
                     save_pending_request({
                         "url": url,
@@ -922,7 +921,7 @@ def upload_jp_certs(args, category, current, jp_certs, failed_lock):
                         "data": jp_certs
                     }, prefix="pending_upload")
         except Exception as e:
-            logger.debug(f"[{category}] upload例外: {e}")
+            logger.debug(f"[{category}] Upload exception: {e}")
             with failed_lock:
                 save_pending_request({
                     "url": url,
@@ -932,9 +931,11 @@ def upload_jp_certs(args, category, current, jp_certs, failed_lock):
     return last_uploaded_index
 
 # --- send_ping: moved above worker_job_thread ---
+# Send a ping to the manager API to report progress and get updated intervals
 def send_ping(args, category, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, my_ip, last_ping_time, status="running", default_ping_seconds=180, default_ctlog_request_interval_sec=1):
     """
-    pingの送信間隔をAPI返答のping_interval_sec/ctlog_request_interval_secで制御。failed_filesとpending_filesの数をクエリパラメータとして付与。
+    The interval for sending pings is controlled by the API response's ping_interval_sec/ctlog_request_interval_sec.
+    The number of failed_files and pending_files is included as query parameters.
     """
     now = time.time()
     if now - last_ping_time >= default_ping_seconds:
@@ -970,7 +971,7 @@ def send_ping(args, category, log_name, ct_log_url, task, end, current, last_upl
                     ping_interval_sec = default_ping_seconds
                     ctlog_request_interval_sec = default_ctlog_request_interval_sec
         except Exception as e:
-            logger.debug(f"[{category}] ping失敗: {e}")
+            logger.debug(f"[{category}] ping failed: {e}")
             ping_interval_sec = default_ping_seconds
             ctlog_request_interval_sec = default_ctlog_request_interval_sec
         return last_ping_time, ping_interval_sec, ctlog_request_interval_sec
@@ -978,8 +979,8 @@ def send_ping(args, category, log_name, ct_log_url, task, end, current, last_upl
 
 def sleep_with_stop_check(seconds: int, stop_event: threading.Event = None):
     """
-    指定秒数sleep。ただしstop_eventが立ったら即return。
-    Ctrl+C等の即時終了性を保つためのラッパー。
+    Sleep for the specified number of seconds, but return immediately if stop_event is set.
+    This wrapper ensures immediate termination on Ctrl+C, etc.
     """
     if stop_event is None:
         stop_event = get_stop_event()
@@ -1004,8 +1005,8 @@ def get_my_ip():
 
 # --- Startup manager API connectivity check ---
 """
-APIを止めた時、workerが無駄にCT Log apiにアクセスし続けるのを止める。
-そのスイッチはapiのDNS recordを消した時にする
+When the API is stopped, prevent the worker from continuing to access the CT Log API unnecessarily.
+This switch is triggered when the API's DNS record is deleted.
 """
 def wait_for_manager_api_ready(manager_url):
     INTERVAL = 180
@@ -1015,66 +1016,66 @@ def wait_for_manager_api_ready(manager_url):
             # DNS resolution
             socket.gethostbyname(parsed.hostname)
         except Exception as e:
-            logger.warning(f"[startup-check] The manager api seems unreachable. Retrying in 180s.")
+            logger.warning(f"[startup-check] The manager API seems unreachable. Retrying in 180s.")
             time.sleep(INTERVAL)
             continue
-        logger.debug(f"[startup-check] manager-api's DNS resolution succeeded.")
+        logger.debug(f"[startup-check] Manager API DNS resolution succeeded.")
         break
-        
+
 
 
 global_tasks = {}
 command_description = '''CT Log Fetcher
 
-プロジェクトの詳細
+Project details:
 TBD
 
 Worker Ranking
 http://ctlog-fetcher.tplinkdns.com/
-                                     
-各社の CT Log API は Public IP Address 単位でRate limitをかけています。
-Proxyを追加すると速くなりますが、お金がかかるのと CT Log API に負担がかかるので無理はしないでください
+
+Each CT Log API applies rate limits per public IP address.
+Adding proxies can speed things up, but it costs money and puts a load on the CT Log API, so please don't overdo it.
 PYTHONPATH=. python worker.py --proxy http://<your-proxy-url-1> --proxy http://<your-proxy-url-2> --worker-name <your-nick-name>
 '''
 def get_args():
-    # 環境変数からデフォルト値を取得
+    # Get default values from environment variables
     proxies_env = os.environ.get('PROXIES')
     worker_name_env = os.environ.get('WORKER_NAME')
     manager_url_env = os.environ.get('MANAGER_URL', 'http://ctlog-fetcher.tplinkdns.com:1173')
     debug_env = os.environ.get('DEBUG')
-    max_threads_env = os.environ.get('MAX_THREADS', 10)  # threadsを増やすとworkerの通信量が増えるので注意
+    max_threads_env = os.environ.get('MAX_THREADS', 10)  # Increasing threads increases worker traffic, so be careful
 
     parser = argparse.ArgumentParser(description=command_description)
     parser.add_argument(
         '--proxies',
         default=None,
-        help='プロキシURL（カンマ区切りで複数指定可） 環境変数: PROXIES'
+        help='Proxy URL (comma-separated for multiple) ENV: PROXIES'
     )
     parser.add_argument(
         '--worker-name',
         default=worker_name_env if worker_name_env else default_worker_name(),
-        help='ワーカー名（デフォルト: 和風ニックネーム。ニックネーム指定可） 環境変数: WORKER_NAME'
+        help='Worker name (default: Japanese-style nickname. You can specify your own) ENV: WORKER_NAME'
     )
     parser.add_argument(
         '--manager',
         default=manager_url_env,
-        help='manager api base url 環境変数: MANAGER_URL'
+        help='Manager API base url ENV: MANAGER_URL'
     )
     parser.add_argument(
         '--debug',
         action='store_true',
         default=(str(debug_env).lower() in ['1', 'true', 'yes']),
-        help='Enable debug logging 環境変数: DEBUG (1/true/yes)'
+        help='Enable debug logging ENV: DEBUG (1/true/yes)'
     )
     parser.add_argument(
         '--max-threads',
         type=int,
         default=int(max_threads_env),
-        help='ThreadPoolExecutorの最大ワーカー数（デフォルト: 10） 環境変数: MAX_THREADS'
+        help='Maximum number of ThreadPoolExecutor workers (default: 10) ENV: MAX_THREADS'
     )
     args = parser.parse_args()
 
-    # --proxiesが指定されていない場合、PROXIES環境変数をカンマ区切りで分割してリスト化
+    # If --proxies is not specified, split PROXIES env var by comma into a list
     if args.proxies is not None:
         args.proxies = [p.strip() for p in args.proxies.split(',') if p.strip()]
     elif proxies_env:
@@ -1103,7 +1104,7 @@ if __name__ == '__main__':
     # worker_name validation
     args.worker_name = validate_worker_name(args.worker_name)
 
-    # print args line by line
+    # Print args line by line
     for k, v in vars(args).items():
         print(f"{k}: {v}")
 
