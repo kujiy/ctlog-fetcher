@@ -22,7 +22,121 @@
     </div>
     <h1>Worker Stats: {{ worker_name }}</h1>
 
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
     <h2>1. Worker Status (last 24 hours, hourly)</h2>
+    {% set hour_labels_py = [] -%}
+    {% set total_jobs_py = [] -%}
+    {% set completed_py = [] -%}
+    {% set running_py = [] -%}
+    {% set resume_wait_py = [] -%}
+    {% set dead_py = [] -%}
+    {% set completed_rate_py = [] -%}
+    {%- for row in status_stats %}
+        {%- set _ = hour_labels_py.append(row.hour_label) -%}
+        {%- set _ = completed_py.append(row.status_counts.completed) -%}
+        {%- set _ = running_py.append(row.status_counts.running) -%}
+        {%- set _ = resume_wait_py.append(row.status_counts.resume_wait) -%}
+        {%- set _ = dead_py.append(row.status_counts.dead) -%}
+        {%- set total = row.status_counts.running + row.status_counts.completed + row.status_counts.resume_wait + row.status_counts.dead -%}
+        {%- set _ = total_jobs_py.append(total) -%}
+        {%- set _ = completed_rate_py.append(((row.status_counts.completed / total * 100) if total > 0 else 0) | round(2)) -%}
+    {%- endfor %}
+    <canvas id="statusChart" width="900" height="320" style="margin-bottom:2em;"></canvas>
+    <script>
+        // Prepare data arrays from Jinja2 context
+        const hourLabels = {{ hour_labels_py | tojson | safe }};
+        const totalJobs = {{ total_jobs_py | tojson | safe }};
+        const completed = {{ completed_py | tojson | safe }};
+        const running = {{ running_py | tojson | safe }};
+        const resumeWait = {{ resume_wait_py | tojson | safe }};
+        const dead = {{ dead_py | tojson | safe }};
+        const completedRate = {{ completed_rate_py | tojson | safe }};
+
+        // Chart.js config
+        const ctx = document.getElementById('statusChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: hourLabels,
+                datasets: [
+                    {
+                        label: 'Completed',
+                        data: completed,
+                        backgroundColor: 'rgba(40, 167, 69, 0.5)',
+                        borderColor: 'rgba(40, 167, 69, 1)',
+                        borderWidth: 1,
+                        yAxisID: 'y',
+                        type: 'bar',
+                        stack: 'jobs'
+                    },
+                    {
+                        label: 'Running',
+                        data: running,
+                        backgroundColor: 'rgba(255, 193, 7, 0.5)',
+                        borderColor: 'rgba(255, 193, 7, 1)',
+                        borderWidth: 1,
+                        yAxisID: 'y',
+                        type: 'bar',
+                        stack: 'jobs'
+                    },
+                    {
+                        label: 'Resume Wait',
+                        data: resumeWait,
+                        backgroundColor: 'rgba(23, 162, 184, 0.5)',
+                        borderColor: 'rgba(23, 162, 184, 1)',
+                        borderWidth: 1,
+                        yAxisID: 'y',
+                        type: 'bar',
+                        stack: 'jobs'
+                    },
+                    {
+                        label: 'Dead',
+                        data: dead,
+                        backgroundColor: 'rgba(220, 53, 69, 0.5)',
+                        borderColor: 'rgba(220, 53, 69, 1)',
+                        borderWidth: 1,
+                        yAxisID: 'y',
+                        type: 'bar',
+                        stack: 'jobs'
+                    },
+                    {
+                        label: 'Completed Rate (%)',
+                        data: completedRate,
+                        backgroundColor: 'rgba(0,0,0,0)',
+                        borderColor: 'rgba(0,0,0,1)',
+                        borderWidth: 2,
+                        yAxisID: 'y2',
+                        type: 'line',
+                        pointRadius: 2,
+                        tension: 0.2
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                stacked: false,
+                plugins: {
+                    legend: { position: 'top' },
+                    title: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Job Count' }
+                    },
+                    y2: {
+                        beginAtZero: true,
+                        position: 'right',
+                        title: { display: true, text: 'Completed Rate (%)' },
+                        grid: { drawOnChartArea: false }
+                    }
+                }
+            }
+        });
+    </script>
     <table>
         <thead>
             <tr>
