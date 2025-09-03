@@ -75,7 +75,11 @@
             {% for r in worker_ranking.worker_total_count_ranking %}
             <tr>
                 <td>{{ loop.index }}</td>
-                <td>{{ r.worker_name }}</td>
+                <td>
+    <a href="/worker-stats/{{ r.worker_name.split(' ')[-1] }}" style="text-decoration: none; color: #3498db;">
+        {{ r.worker_name }}
+    </a>
+</td>
                 <td>{{ "{:,}".format(r.worker_total_count) }}</td>
                 <td>
                     {% if r.jp_count is defined and r.jp_count > 0 %}

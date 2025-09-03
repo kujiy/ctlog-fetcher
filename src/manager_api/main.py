@@ -777,6 +777,97 @@ def clear_cache():
 
 
 # --- get_tree_size with 1-minute cache ---
+
+from datetime import timedelta
+
+@app.get("/api/worker_stats/{worker_name}")
+async def get_worker_stats(worker_name: str, db=Depends(get_async_session)):
+    # 1. WorkerLogStat: .jp count降順
+    stat_stmt = select(WorkerLogStat).where(WorkerLogStat.worker_name == worker_name)
+    stat_rows = (await db.execute(stat_stmt)).scalars().all()
+    log_stats = sorted(
+        [
+            {
+                "log_name": s.log_name,
+                "worker_total_count": s.worker_total_count,
+                "jp_count_sum": s.jp_count_sum,
+                "last_updated": s.last_updated.isoformat() if s.last_updated else None,
+            }
+            for s in stat_rows
+        ],
+        key=lambda x: x["worker_total_count"] or 0,
+        reverse=True
+    )
+
+    # 2. WorkerStatus: 過去24h, 1hごと集計
+    now = datetime.now(JST)
+    since = now - timedelta(hours=24)
+    status_stmt = select(WorkerStatus).where(
+        WorkerStatus.worker_name == worker_name,
+        WorkerStatus.last_ping >= since
+    )
+    status_rows = (await db.execute(status_stmt)).scalars().all()
+
+    # 24時間分のバケツを作成
+    buckets = []
+    for i in range(24):
+        bucket_start = since + timedelta(hours=i)
+        bucket_end = bucket_start + timedelta(hours=1)
+        buckets.append({
+            "start": bucket_start,
+            "end": bucket_end,
+            "status_counts": {},
+            "jp_count_sum": 0,
+            "log_name_counts": {},
+            "hour_label": bucket_start.strftime("%Y-%m-%d %H:00"),
+        })
+
+    # 各WorkerStatusをバケツに振り分けて集計
+    for ws in status_rows:
+        last_ping = ws.last_ping
+        # offset-naiveならJSTを付与
+        if last_ping is not None and last_ping.tzinfo is None:
+            last_ping = last_ping.replace(tzinfo=JST)
+        for bucket in buckets:
+            if last_ping is not None and bucket["start"] <= last_ping < bucket["end"]:
+                # statusごとのjob数
+                st = ws.status or "unknown"
+                bucket["status_counts"][st] = bucket["status_counts"].get(st, 0) + 1
+                # jp_count合計
+                bucket["jp_count_sum"] += ws.jp_count or 0
+                # log_nameごとのjob数
+                ln = ws.log_name or "unknown"
+                bucket["log_name_counts"][ln] = bucket["log_name_counts"].get(ln, 0) + 1
+                break
+
+    # JobStatusの順序
+    job_status_order = ["running", "completed", "resume_wait", "dead"]
+
+    # バケツを新しい順に
+    buckets_sorted = list(reversed(buckets))
+
+    status_stats = []
+    for b in buckets_sorted:
+        # status_counts: 必ず全JobStatusを含める
+        status_counts = {status: b["status_counts"].get(status, 0) for status in job_status_order}
+        # log_name_counts: 多い順
+        log_name_counts = dict(sorted(b["log_name_counts"].items(), key=lambda x: x[1], reverse=True))
+        # hour_label: "YYYY-MM-DD HH:00 - HH:00"
+        start_hour = b["start"].strftime("%Y-%m-%d %H:00")
+        end_hour = (b["end"]).strftime("%H:00")
+        hour_label = f"{start_hour} - {end_hour}"
+        status_stats.append({
+            "hour_label": hour_label,
+            "status_counts": status_counts,
+            "jp_count_sum": b["jp_count_sum"],
+            "log_name_counts": log_name_counts,
+        })
+
+    return {
+        "worker_name": worker_name,
+        "log_stats": log_stats,
+        "status_stats": status_stats,
+    }
 _tree_size_cache = TTLCache(maxsize=100, ttl=60)
 
 @cached(_tree_size_cache)

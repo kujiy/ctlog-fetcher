@@ -209,6 +209,29 @@ async def fetched_certs_page(request: Request, worker_name: str):
         "error_message": error_message
     })
 
+@app.get("/worker-stats/{worker_name}", response_class=HTMLResponse)
+async def worker_stats_page(request: Request, worker_name: str):
+    stats_data = None
+    error_message = None
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/worker_stats/{worker_name}")
+            if response.status_code == 200:
+                stats_data = response.json()
+            else:
+                error_message = f"API returned status code: {response.status_code}"
+    except Exception as e:
+        error_message = str(e)
+
+    return templates.TemplateResponse("worker_stats.html", {
+        "request": request,
+        "worker_name": worker_name,
+        "log_stats": stats_data["log_stats"] if stats_data else [],
+        "status_stats": stats_data["status_stats"] if stats_data else [],
+        "error_message": error_message
+    })
+
 # API example: Get collection status
 @app.get("/api/ui/status")
 def get_status():

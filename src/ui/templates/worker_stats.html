@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Worker Stats - {{ worker_name }}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        body { font-family: sans-serif; margin: 2em; }
+        h1, h2 { color: #2c3e50; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 2em; }
+        th, td { border: 1px solid #ccc; padding: 0.5em; text-align: left; }
+        th { background: #f4f4f4; }
+        .highlight-green { background-color: #d4edda; }
+        .nav-links a { margin-right: 1em; text-decoration: none; color: #3498db; }
+        .small { font-size: 0.7em }
+    </style>
+</head>
+<body>
+    <div class="nav-links" style="margin-bottom: 2em;">
+        <a href="/">🏠 Dashboard</a>
+        <a href="/unique_certs">🔒 Sample Certificates</a>
+    </div>
+    <h1>Worker Stats: {{ worker_name }}</h1>
+
+    <h2>1. Worker Status (last 24 hours, hourly)</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Hour (JST)</th>
+                <th>Total Jobs</th>
+                <th>Completed Rate</th>
+                <th>Completed</th>
+                <th>Running</th>
+                <th>Resume Wait</th>
+                <th>Dead</th>
+                <th>.jp Count Sum</th>
+                <th>Log Name Job Counts (desc)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in status_stats %}
+            {% set total_jobs = row.status_counts.running + row.status_counts.completed + row.status_counts.resume_wait + row.status_counts.dead %}
+            {% set completed_rate = (row.status_counts.completed / total_jobs * 100) if total_jobs > 0 else 0 %}
+            <tr>
+                <th scope="row"><b>{{ row.hour_label }}</b></th>
+                <td>{{ "{:,}".format(total_jobs) }}</td>
+                <td>{{ '%.2f' % completed_rate }}%</td>
+                <td class="highlight-green">{{ "{:,}".format(row.status_counts.completed) }}</td>
+                <td>{{ "{:,}".format(row.status_counts.running) }}</td>
+                <td>{{ "{:,}".format(row.status_counts.resume_wait) }}</td>
+                <td>{{ "{:,}".format(row.status_counts.dead) }}</td>
+                <td>{{ "{:,}".format(row.jp_count_sum) }}</td>
+                <td class="small">
+                    {% for log_name, count in row.log_name_counts.items() %}
+                        {{ log_name }}: {{ "{:,}".format(count) }}{% if not loop.last %}<br>{% endif %}
+                    {% endfor %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h2>2. Worker Log Stats</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Log Name</th>
+                <th>Worker Total Count</th>
+                <th>.jp Count</th>
+                <th>.jp Ratio</th>
+                <th>Last Updated</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for stat in log_stats %}
+            <tr>
+                <th scope="row"><b>{{ stat.log_name }}</b></th>
+                <td>{{ "{:,}".format(stat.worker_total_count) }}</td>
+                <td>{{ "{:,}".format(stat.jp_count_sum) }}</td>
+                <td>
+                    {% if stat.worker_total_count and stat.worker_total_count > 0 %}
+                        {{ '%.2f' % (stat.jp_count_sum / stat.worker_total_count * 100) }}%
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td>{{ stat.last_updated }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>

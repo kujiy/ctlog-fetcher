@@ -24,6 +24,7 @@ EXCLUDE_PATHS = (
     "/api/unique_certs",
     "/api/fetched_certs",
     "/api/cache/stats",
+    "/api/worker_stats",
 )
 LATENCY_BUCKETS = tuple(  # 粗めのバケットでオーバーヘッド低減
     float(x) for x in os.getenv("LATENCY_BUCKETS", "2,5,10,20,30,45,60").split(",")
