@@ -191,14 +191,15 @@
                 <th>Progress</th>
             </tr>
             {% for log in log_progress_list %}
-            <tr>
-                <th>{{ log.category }}</th>
-                <th>{{ log.log_name }}</th>
+            {% set percent = log.fetch_rate|float * 100 %}
+            {%  set completed = percent > 99.98 %}
+            <tr class="{% if completed %}highlight-green{% endif %}">
+                <th class="{% if completed %}highlight-green{% endif %}">{{ log.category }}</th>
+                <th class="{% if completed %}highlight-green{% endif %}">{{ log.log_name }}</th>
                 <td>{{ "{:,}".format(log.sth_end) if log.sth_end is not none else '-' }}</td>
                 <td>{{ "{:,}".format(log.min_completed_end) if log.min_completed_end is not none else '-' }}</td>
                 <td>{{ log.status }}</td>
                 <td>
-                    {% set percent = (log.min_completed_end / log.sth_end * 100) if log.sth_end else 0 %}
                     <div class="progress-bar"><div class="progress" style="width: {{ percent|int }}%"></div></div>
                     {{ log.min_completed_end }} / {{ log.sth_end }} ({{ '%.2f' % percent }}%)
                 </td>
