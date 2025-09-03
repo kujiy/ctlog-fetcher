@@ -7,9 +7,11 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import os
 from typing import Any
-
+import asyncio
 import httpx
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+from src.ui.snapshot_utils import load_snapshot, save_snapshot
 
 from src.config import CT_LOG_ENDPOINTS, MANAGER_API_URL_FOR_UI
 
@@ -18,6 +20,46 @@ logger = app.logger = getLogger("uvicorn")
 # Setup template directory
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "templates")
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
+
+@app.on_event("startup")
+async def start_snapshot_job():
+    async def snapshot_job():
+        while True:
+            try:
+                # Wait until 9:30 JST
+                JST = timezone(timedelta(hours=9))
+                now = datetime.now(JST)
+                target = now.replace(hour=9, minute=30, second=0, microsecond=0)
+                if now >= target:
+                    # If already past 9:30 today, schedule for tomorrow
+                    target = target + timedelta(days=1)
+                wait_sec = (target - now).total_seconds()
+                await asyncio.sleep(wait_sec)
+                # After waiting, update snapshot
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/worker_ranking")
+                    if resp.status_code == 200:
+                        save_snapshot(resp.json())
+                        logger.info("snapshot.json updated at 9:30 JST")
+            except Exception as e:
+                logger.error(f"Snapshot job error: {e}")
+            # Sleep 1 hour as fallback
+            await asyncio.sleep(3600)
+
+    # On startup: create snapshot.json if not exists
+    snapshot_path = os.path.join(os.path.dirname(__file__), "snapshot.json")
+    if not os.path.exists(snapshot_path):
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/worker_ranking")
+                if resp.status_code == 200:
+                    save_snapshot(resp.json())
+                    logger.info("snapshot.json created on startup")
+        except Exception as e:
+            logger.error(f"Initial snapshot creation failed: {e}")
+
+    # Start background job
+    asyncio.create_task(snapshot_job())
 
 logger.warning(f"MANAGER_API_URL: {MANAGER_API_URL_FOR_UI}")
 
@@ -144,6 +186,35 @@ async def dashboard(request: Request):
         )
     )
 
+    # --- Worker Ranking Diff Logic ---
+    snapshot = load_snapshot()
+    ranking_diff = {}
+    if worker_ranking and snapshot:
+        # Build {worker_name: rank, count, jp_count} for snapshot and current
+        snap_map = {r["worker_name"]: {"rank": i+1, "worker_total_count": r["worker_total_count"], "jp_count": r.get("jp_count", 0)}
+                    for i, r in enumerate(snapshot.get("worker_total_count_ranking", []))}
+        curr_map = {r["worker_name"]: {"rank": i+1, "worker_total_count": r["worker_total_count"], "jp_count": r.get("jp_count", 0)}
+                    for i, r in enumerate(worker_ranking.get("worker_total_count_ranking", []))}
+        for name, curr in curr_map.items():
+            prev = snap_map.get(name)
+            if prev:
+                rank_diff = prev["rank"] - curr["rank"]
+                count_diff = curr["worker_total_count"] - prev["worker_total_count"]
+                jp_diff = curr["jp_count"] - prev["jp_count"]
+                ranking_diff[name] = {
+                    "rank_diff": rank_diff,
+                    "count_diff": count_diff,
+                    "jp_diff": jp_diff
+                }
+            else:
+                ranking_diff[name] = {
+                    "rank_diff": 0,
+                    "count_diff": 0,
+                    "jp_diff": 0
+                }
+    snapshot_time = None
+    if snapshot and "timestamp" in snapshot:
+        snapshot_time = datetime.fromisoformat(snapshot["timestamp"])
     context = {
         "request": request,
         "summary": summary,
@@ -152,7 +223,9 @@ async def dashboard(request: Request):
         "workers": workers_sorted,
         "round_trip_time": round_trip_time,
         "worker_ranking": worker_ranking,
-        "logs_summary": logs_summary
+        "logs_summary": logs_summary,
+        "ranking_diff": ranking_diff,
+        "snapshot_time": snapshot_time
     }
     if worker_ranking:
         # Update cache

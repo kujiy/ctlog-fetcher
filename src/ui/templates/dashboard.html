@@ -23,6 +23,9 @@
         .highlight-green { background-color: #d4edda; }
         .error { color: red; }
         .nav-links a { margin-right: 1em; text-decoration: none; color: #3498db; }
+        .red { color: red; }
+        .green { color: green; }
+        .diff { font-size: 0.8em; color: gray; }
     </style>
 </head>
 <body>
@@ -62,6 +65,11 @@
     </section>
 
     <h2>Worker Ranking</h2>
+    {% if snapshot_time %}
+        <div style="margin-bottom: 0.5em; color: #888; float:right;">
+            Diff comparison time: {{ snapshot_time.strftime('%Y-%m-%d %H:%M:%S') }}
+        </div>
+    {% endif %}
     <div id="worker-ranking">
         {% if worker_ranking %}
         <table>
@@ -73,17 +81,39 @@
                 <th>.jp Count</th>
                 <th>.jp Ratio</th></tr>
             {% for r in worker_ranking.worker_total_count_ranking %}
+            {% set diff = ranking_diff.get(r.worker_name, {}) %}
             <tr>
-                <td>{{ loop.index }}</td>
                 <td>
-    <a href="/worker-stats/{{ r.worker_name.split(' ')[-1] }}" style="text-decoration: none; color: #3498db;">
-        {{ r.worker_name }}
-    </a>
-</td>
-                <td>{{ "{:,}".format(r.worker_total_count) }}</td>
+                    {{ loop.index }}
+                    {% if diff.rank_diff > 0 %}
+                        <span class="green" title="Up by {{ diff.rank_diff }}">▲</span>
+                    {% elif diff.rank_diff < 0 %}
+                        <span class="red" title="Down by {{ -diff.rank_diff }}">▼</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="/worker-stats/{{ r.worker_name.split(' ')[-1] }}" style="text-decoration: none; color: #3498db;">
+                        {{ r.worker_name }}
+                    </a>
+                </td>
+                <td>
+                    {{ "{:,}".format(r.worker_total_count) }}
+                    {% if diff.count_diff > 0 %}
+                        <span class="diff" title="+{{ diff.count_diff }}">⬆️ +{{ diff.count_diff }}</span>
+                    {% elif diff.count_diff < 0 %}
+                        <span class="diff" title="{{ diff.count_diff }}">⬇️ {{ diff.count_diff }}</span>
+                    {% endif %}
+                </td>
                 <td>
                     {% if r.jp_count is defined and r.jp_count > 0 %}
-                        <a href="/fetched-certs/{{ r.worker_name.split(' ')[-1] }}" style="text-decoration: none; color: #3498db;">{{ "{:,}".format(r.jp_count) }}</a>
+                        <a href="/fetched-certs/{{ r.worker_name.split(' ')[-1] }}" style="text-decoration: none; color: #3498db;">
+                            {{ "{:,}".format(r.jp_count) }}
+                        </a>
+                        {% if diff.jp_diff > 0 %}
+                            <span class="diff" title="+{{ diff.jp_diff }}">⬆️ +{{ diff.jp_diff }}</span>
+                        {% elif diff.jp_diff < 0 %}
+                            <span class="diff" title="{{ diff.jp_diff }}">⬇️ {{ diff.jp_diff }}</span>
+                        {% endif %}
                     {% else %}
                         -
                     {% endif %}
