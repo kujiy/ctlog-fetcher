@@ -32,9 +32,9 @@ async def aggregate_log_fetch_progress():
                                 i = min_completed_end + BATCH_SIZE
                             else:
                                 i = BATCH_SIZE - 1
-                            # 高速化: 一括でcompletedなend値を取得し、Python側で処理
+                            # speed up by fetching all completed ends at once
                             completed_ends = await get_all_completed_worker_ends(log_name, session)
-                            # completed_endsをsetにしてBATCH_SIZEごとに探索
+                            # set for O(1) lookups that speeds up the loop
                             completed_ends_set = set(completed_ends)
                             while i <= sth_end:
                                 if i in completed_ends_set:

@@ -9,8 +9,8 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 
-SAMPLE_RATE = float(os.getenv("SAMPLE_RATE", "0.1"))  # 10%だけ記録
-ALWAYS_RECORD_OVER = float(os.getenv("ALWAYS_RECORD_OVER_SECONDS", "10"))  # 10秒以上は必ず記録
+SAMPLE_RATE = float(os.getenv("SAMPLE_RATE", "0.1"))  # Record only 10%
+ALWAYS_RECORD_OVER = float(os.getenv("ALWAYS_RECORD_OVER_SECONDS", "10"))  # Always record if over 10 seconds
 
 EXCLUDE_PATHS = (
     "/metrics",
@@ -26,7 +26,7 @@ EXCLUDE_PATHS = (
     "/api/cache/stats",
     "/api/worker_stats",
 )
-LATENCY_BUCKETS = tuple(  # 粗めのバケットでオーバーヘッド低減
+LATENCY_BUCKETS = tuple(  # Coarse buckets to reduce overhead
     float(x) for x in os.getenv("LATENCY_BUCKETS", "2,5,10,20,30,45,60").split(",")
 )
 REQUEST_LATENCY = Histogram(
@@ -49,10 +49,10 @@ class LatencySamplingMiddleware(BaseHTTPMiddleware):
         finally:
             elapsed = time.perf_counter() - start
 
-            # サンプリング判定：閾値超は必ず記録、その他はSAMPLE_RATEで記録
+            # Sampling decision: always record if over threshold, otherwise record by SAMPLE_RATE
             should_record = (elapsed >= ALWAYS_RECORD_OVER) or (random.random() < SAMPLE_RATE)
             if should_record:
-                # ラベル作成は必要になったときだけ（微小だけどオーバーヘッド削減）
+                # Create label only when needed (minimally reduces overhead)
                 route = request.scope.get("route")
                 path_template = getattr(route, "path", raw_path)
 

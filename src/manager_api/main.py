@@ -43,18 +43,12 @@ BATCH_SIZE = 16000
 
 
 """
-`locks = defaultdict(asyncio.Lock)` と宣言すると、`locks[lock_key]` で未登録のキーにアクセスした際、自動的に `asyncio.Lock()` のインスタンスが生成され、そのキーに紐付けて返されます。
-これは `collections.defaultdict` の仕様で、コンストラクタに渡した関数（ここでは `asyncio.Lock`）が「デフォルトファクトリ」として使われるためです。
+When `locks = defaultdict(asyncio.Lock)` is declared, accessing an unregistered key with `locks[lock_key]` will automatically generate an instance of `asyncio.Lock()` and associate it with that key.  
+This is due to the behavior of `collections.defaultdict`, where the function passed to the constructor (in this case, `asyncio.Lock`) is used as the "default factory.
 """
 # 4-tuple key: (worker_name, log_name, start, end)
 locks = defaultdict(asyncio.Lock)
 
-
-"""
-# Interval (seconds) at which the worker accesses the CT log
-If this value is set too high, the worker will be mostly idle, and instructions from the manager API will not be reflected to the worker.
-Like communicating with a spaceship, it is desirable to set the interval to several minutes to several tens of minutes at most, so that communication can occur at a reasonable frequency.
-"""
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 logger = app.logger = logging.getLogger("manager_api")
@@ -64,8 +58,8 @@ app.add_middleware(LatencySamplingMiddleware)
 @app.get("/metrics")
 def metrics() -> Response:
     """
-    multiprocess対応のメトリクス出力。
-    uvicorn --workers N のときは必ず MultiProcessCollector で集約する。
+    Output metrics compatible with multiprocess.
+    When using `uvicorn --workers N`, always aggregate with MultiProcessCollector.
     """
     registry = CollectorRegistry()
     multiprocess.MultiProcessCollector(registry)
@@ -782,7 +776,7 @@ from datetime import timedelta
 
 @app.get("/api/worker_stats/{worker_name}")
 async def get_worker_stats(worker_name: str, db=Depends(get_async_session)):
-    # 1. WorkerLogStat: .jp count降順
+    # 1. WorkerLogStat: sorted by jp_count_sum desc
     stat_stmt = select(WorkerLogStat).where(WorkerLogStat.worker_name == worker_name)
     stat_rows = (await db.execute(stat_stmt)).scalars().all()
     log_stats = sorted(
@@ -799,7 +793,7 @@ async def get_worker_stats(worker_name: str, db=Depends(get_async_session)):
         reverse=True
     )
 
-    # 2. WorkerStatus: 過去24h, 1hごと集計
+    # 2. WorkerStatus: past 24 hours, aggregated hourly
     now = datetime.now(JST)
     since = now - timedelta(hours=24)
     status_stmt = select(WorkerStatus).where(
@@ -808,7 +802,7 @@ async def get_worker_stats(worker_name: str, db=Depends(get_async_session)):
     )
     status_rows = (await db.execute(status_stmt)).scalars().all()
 
-    # 24時間分のバケツを作成
+    # a bucket for 24 hours, each 1 hour
     buckets = []
     for i in range(24):
         bucket_start = since + timedelta(hours=i)
@@ -822,35 +816,34 @@ async def get_worker_stats(worker_name: str, db=Depends(get_async_session)):
             "hour_label": bucket_start.strftime("%Y-%m-%d %H:00"),
         })
 
-    # 各WorkerStatusをバケツに振り分けて集計
+    # calculate each worker status into the buckets
     for ws in status_rows:
         last_ping = ws.last_ping
-        # offset-naiveならJSTを付与
+        # Add JST if last_ping is offset-naive
         if last_ping is not None and last_ping.tzinfo is None:
             last_ping = last_ping.replace(tzinfo=JST)
         for bucket in buckets:
             if last_ping is not None and bucket["start"] <= last_ping < bucket["end"]:
-                # statusごとのjob数
+                # jobs status count
                 st = ws.status or "unknown"
                 bucket["status_counts"][st] = bucket["status_counts"].get(st, 0) + 1
-                # jp_count合計
+                # sum of jp_count
                 bucket["jp_count_sum"] += ws.jp_count or 0
-                # log_nameごとのjob数
+                # job count per log_name
                 ln = ws.log_name or "unknown"
                 bucket["log_name_counts"][ln] = bucket["log_name_counts"].get(ln, 0) + 1
                 break
 
-    # JobStatusの順序
     job_status_order = ["running", "completed", "resume_wait", "dead"]
 
-    # バケツを新しい順に
+    # order by most recent hour first
     buckets_sorted = list(reversed(buckets))
 
     status_stats = []
     for b in buckets_sorted:
-        # status_counts: 必ず全JobStatusを含める
+        # status_counts: include all job statuses
         status_counts = {status: b["status_counts"].get(status, 0) for status in job_status_order}
-        # log_name_counts: 多い順
+        # log_name_counts: order by count desc
         log_name_counts = dict(sorted(b["log_name_counts"].items(), key=lambda x: x[1], reverse=True))
         # hour_label: "YYYY-MM-DD HH:00 - HH:00"
         start_hour = b["start"].strftime("%Y-%m-%d %H:00")
