@@ -83,14 +83,14 @@
             {% for r in worker_ranking.worker_total_count_ranking %}
             {% set diff = ranking_diff.get(r.worker_name, {}) %}
             <tr>
-                <td>
+                <th>
                     {{ loop.index }}
                     {% if diff.rank_diff > 0 %}
                         <span class="green" title="Up by {{ diff.rank_diff }}">▲</span>
                     {% elif diff.rank_diff < 0 %}
                         <span class="red" title="Down by {{ -diff.rank_diff }}">▼</span>
                     {% endif %}
-                </td>
+                </th>
                 <td>
                     <a href="/worker-stats/{{ r.worker_name.split(' ')[-1] }}" style="text-decoration: none; color: #3498db;">
                         {{ r.worker_name }}
@@ -192,8 +192,8 @@
             </tr>
             {% for log in log_progress_list %}
             <tr>
-                <td>{{ log.category }}</td>
-                <td>{{ log.log_name }}</td>
+                <th>{{ log.category }}</th>
+                <th>{{ log.log_name }}</th>
                 <td>{{ "{:,}".format(log.sth_end) if log.sth_end is not none else '-' }}</td>
                 <td>{{ "{:,}".format(log.min_completed_end) if log.min_completed_end is not none else '-' }}</td>
                 <td>{{ log.status }}</td>
@@ -229,7 +229,7 @@
         </tr>
         {% for w in workers %}
         <tr>
-            <td>{{ w.worker_name }}</td>
+            <th>{{ w.worker_name }}</th>
             <td>{{ w.log_name }}</td>
             <td>{{ w.start }}</td>
             <td>{{ w.end }}</td>
@@ -263,7 +263,7 @@
         <tbody>
             {% for r in round_trip_time %}
             <tr>
-                <td>{{ r.api_name }}</td>
+                <th>{{ r.api_name }}</th>
                 <td>{{ '%.2f' % r.rtt if r.rtt else "-" }}</td>
             </tr>
             {% endfor %}
