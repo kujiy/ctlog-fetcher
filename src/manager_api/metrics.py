@@ -7,7 +7,7 @@ from prometheus_client import Histogram
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
-
+from src.share.logger import logger
 
 SAMPLE_RATE = float(os.getenv("SAMPLE_RATE", "0.1"))  # Record only 10%
 ALWAYS_RECORD_OVER = float(os.getenv("ALWAYS_RECORD_OVER_SECONDS", "10"))  # Always record if over 10 seconds
@@ -58,4 +58,7 @@ class LatencySamplingMiddleware(BaseHTTPMiddleware):
 
                 REQUEST_LATENCY.labels(request.method, path_template).observe(elapsed)
 
-            return response
+            if "response" in locals():
+                return response
+            # logger.warning(f"Please ignore {raw_path} from the metrics")
+            return await call_next(request)
