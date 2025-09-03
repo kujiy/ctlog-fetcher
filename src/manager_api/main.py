@@ -20,7 +20,8 @@ import asyncio
 from collections import defaultdict
 from src.share.job_status import JobStatus
 from .certificate_cache import cert_cache
-from ..config import CT_LOG_ENDPOINTS, BACKGROUND_JOBS_ENABLED, ETA_BASE_DATE, LOG_FETCH_PROGRESS_TTL, WORKER_CTLOG_REQUEST_INTERVAL_SEC, WORKER_PING_INTERVAL_SEC
+from ..config import CT_LOG_ENDPOINTS, BACKGROUND_JOBS_ENABLED, ETA_BASE_DATE, LOG_FETCH_PROGRESS_TTL, \
+    WORKER_CTLOG_REQUEST_INTERVAL_SEC, WORKER_PING_INTERVAL_SEC, ORDERED_CATEGORIES
 from .base_models import WorkerPingModel, WorkerPingBaseModel, WorkerResumeRequestModel, UploadCertItem, WorkerErrorModel
 import datetime as dt
 from ..share.animal import get_worker_emoji
@@ -661,14 +662,9 @@ async def get_worker_categories():
     }
     """
     all_categories = list(CT_LOG_ENDPOINTS.keys())
+    ordered_categories = ORDERED_CATEGORIES.copy()
 
     # e.g. google 3, digicert 1, cloudflare 1, letsencrypt 1, trustasia 1
-    ordered_categories = []
-    ordered_categories.extend(["google"] * 3)
-    ordered_categories.extend(["digicert"] * 1)
-    ordered_categories.extend(["cloudflare"] * 1)
-    ordered_categories.extend(["letsencrypt"] * 1)
-    ordered_categories.extend(["trustasia"] * 1)
     random.shuffle(ordered_categories)
     return {
         "all_categories": all_categories,
