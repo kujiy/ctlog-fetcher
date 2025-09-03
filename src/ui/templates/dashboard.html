@@ -161,16 +161,16 @@
                 <td>{{ "{:,}".format(logs_summary.total_tree_size) }}</td>
                 <td>{{ "{:,}".format(logs_summary.fetched_tree_size) }}</td>
                 <td>{% if logs_summary.eta_days is not none %}{{ logs_summary.eta_days }}{% else %}-{% endif %}</td>
-                <td>{{ logs_summary.total_jp }}</td>
+                <td>{{ "{:,}".format(logs_summary.total_jp) }}</td>
                 <td>{{ '%.2f' % (logs_summary.jp_ratio * 100) }}%</td>
                 <td class="highlight-green">
-                    <a href="/unique_certs" style="text-decoration: none; color: #3498db; margin-right: 1em;">{{ logs_summary.unique_jp_count }}</a>
+                    <a href="/unique_certs" style="text-decoration: none; color: #3498db; margin-right: 1em;">{{ "{:,}".format(logs_summary.unique_jp_count) }}</a>
                 </td>
                 <td>{{ '%.2f' % (logs_summary.unique_jp_ratio * 100) }}%</td>
                 <td>
                     {% set percent = logs_summary.fetched_rate * 100 %}
                     <div class="progress-bar"><div class="progress" style="width: {{ percent|int }}%"></div></div>
-                    {{ logs_summary.fetched_tree_size }} / {{ logs_summary.total_tree_size }} ({{ '%.2f' % percent }}%)
+                    {{ "{:,}".format(logs_summary.fetched_tree_size) }} / {{ "{:,}".format(logs_summary.total_tree_size) }} ({{ '%.2f' % percent }}%)
                 </td>
             </tr>
         </table>
@@ -201,7 +201,7 @@
                 <td>{{ log.status }}</td>
                 <td>
                     <div class="progress-bar"><div class="progress" style="width: {{ percent|int }}%"></div></div>
-                    {{ log.min_completed_end }} / {{ log.sth_end }} ({{ '%.2f' % percent }}%)
+                    {{ "{:,}".format(log.min_completed_end) }} / {{ "{:,}".format(log.sth_end) }} ({{ '%.2f' % percent }}%)
                 </td>
             </tr>
             {% endfor %}
@@ -232,9 +232,9 @@
         <tr>
             <th>{{ w.worker_name }}</th>
             <td>{{ w.log_name }}</td>
-            <td>{{ w.start }}</td>
-            <td>{{ w.end }}</td>
-            <td>{{ w.current }}</td>
+            <td>{{ "{:,}".format(w.start) }}</td>
+            <td>{{ "{:,}".format(w.end) }}</td>
+            <td>{{ "{:,}".format(w.current) }}</td>
             <td>{{ w.last_uploaded_index if w.last_uploaded_index is not none else '' }}</td>
             <td>{{ w.worker_fetched_count }}</td>
             <td>
