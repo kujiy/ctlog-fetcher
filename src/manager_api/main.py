@@ -441,47 +441,13 @@ async def get_logs_summary(db=Depends(get_async_session)):
 # Progress information per log
 @app.get("/api/logs_progress")
 async def get_logs_progress(db=Depends(get_async_session)):
-    # Get the latest tree_size for each log_name
-    sth_map = {}
-    subq = select(
-        CTLogSTH.log_name,
-        func.max(CTLogSTH.fetched_at).label('max_fetched_at')
-    ).group_by(CTLogSTH.log_name).subquery()
-    sth_stmt = select(CTLogSTH.log_name, CTLogSTH.tree_size).join(
-        subq,
-        and_(CTLogSTH.log_name == subq.c.log_name, CTLogSTH.fetched_at == subq.c.max_fetched_at)
-    )
-    sth_rows = (await db.execute(sth_stmt)).all()
-    for log_name, tree_size in sth_rows:
-        sth_map[log_name] = tree_size
-
-    # Enumerate all combinations of log_name/ct_log_url
-    all_logs = []
-    for cat, endpoints in CT_LOG_ENDPOINTS.items():
-        for log_name, ct_log_url in endpoints:
-            all_logs.append((log_name, ct_log_url))
-
+    # Fetch all LogFetchProgress records
+    progress_rows = (await db.execute(select(LogFetchProgress).order_by(LogFetchProgress.category, LogFetchProgress.log_name))).scalars().all()
     logs = []
-    for log_name, ct_log_url in all_logs:
-        stat_stmt = select(WorkerLogStat).where(WorkerLogStat.log_name==log_name)
-        stat_rows = (await db.execute(stat_stmt)).scalars().all()
-        total_fetched = sum([s.worker_total_count or 0 for s in stat_rows])
-        jp_count = sum([s.jp_count_sum or 0 for s in stat_rows])
-        jp_ratio = (jp_count / total_fetched) if total_fetched > 0 else 0
-        tree_size = sth_map.get(log_name)
-        logs.append({
-            "log_name": log_name,
-            "total_fetched": total_fetched,
-            "jp_count": jp_count,
-            "jp_ratio": jp_ratio,
-            "tree_size": tree_size,
-            "ct_log_url": ct_log_url
-        })
-    total = sum([l["total_fetched"] for l in logs])
-    return {
-        "summary": {"total": total, "logs": len(logs)},
-        "logs": logs
-    }
+    for p in progress_rows:
+        log_dict = {k: v for k, v in p.__dict__.items() if not k.startswith('_')}
+        logs.append(log_dict)
+    return logs
 
 # Status information per worker
 @app.get("/api/workers_status")

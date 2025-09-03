@@ -180,26 +180,34 @@
 
 
     <h2>Progress by Log</h2>
-    {% for cat, cat_logs in logs_by_cat.items() %}
-    <h3>{{ cat|capitalize }}</h3>
-    <table>
-    <tr><th>Log Name</th><th>Tree Size</th><th>Fetched</th><th>.jp Count</th><th>.jp Ratio</th><th>Progress</th></tr>
-        {% for log in cat_logs %}
-        <tr>
-            <td>{{ log.log_name }}</td>
-            <td>{% if log.tree_size is not none %}{{ "{:,}".format(log.tree_size) }}{% else %}-{% endif %}</td>
-            <td>{{ "{:,}".format(log.total_fetched) }}</td>
-            <td>{{ log.jp_count }}</td>
-            <td>{% if log.total_fetched > 0 %}{{ '%.2f' % (log.jp_count / log.total_fetched * 100) }}%{% else %}-{% endif %}</td>
-            <td>
-                {% set percent = (log.total_fetched / log.tree_size * 100) if log.tree_size else 0 %}
-                <div class="progress-bar"><div class="progress" style="width: {{ percent|int }}%"></div></div>
-                {{ log.total_fetched }} / {{ log.tree_size if log.tree_size is not none else '-' }} ({{ '%.2f' % percent }}%)
-            </td>
-        </tr>
-        {% endfor %}
-    </table>
-    {% endfor %}
+    {% if log_progress_list %}
+        <table>
+            <tr>
+                <th>category</th>
+                <th>log_name</th>
+                <th>sth_end</th>
+                <th>min_completed_end</th>
+                <th>status</th>
+                <th>Progress</th>
+            </tr>
+            {% for log in log_progress_list %}
+            <tr>
+                <td>{{ log.category }}</td>
+                <td>{{ log.log_name }}</td>
+                <td>{{ "{:,}".format(log.sth_end) if log.sth_end is not none else '-' }}</td>
+                <td>{{ "{:,}".format(log.min_completed_end) if log.min_completed_end is not none else '-' }}</td>
+                <td>{{ log.status }}</td>
+                <td>
+                    {% set percent = (log.min_completed_end / log.sth_end * 100) if log.sth_end else 0 %}
+                    <div class="progress-bar"><div class="progress" style="width: {{ percent|int }}%"></div></div>
+                    {{ log.min_completed_end }} / {{ log.sth_end }} ({{ '%.2f' % percent }}%)
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+    <p>No logs in this category.</p>
+    {% endif %}
 
 
 

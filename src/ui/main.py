@@ -96,7 +96,7 @@ async def dashboard(request: Request):
         return templates.TemplateResponse("dashboard.html", cached_context)
 
 
-    logs = []
+    log_progress_list = []
     workers = []
     round_trip_time = []
     summary = {"total": 0, "workers": 0}
@@ -104,11 +104,8 @@ async def dashboard(request: Request):
     logs_summary = None
 
     # Get data from APIs
-    logs, logs_summary, worker_ranking, workers = await get_dashboard_apis(logs, logs_summary, round_trip_time, summary,
-                                                                           worker_ranking, workers)
-
-    # Split by category
-    logs_by_cat = await _dashboard_split_by_category(logs)
+    log_progress_list, logs_summary, worker_ranking, workers = await get_dashboard_apis(log_progress_list, logs_summary, round_trip_time, summary,
+                                                                                  worker_ranking, workers)
 
     # Convert last_ping to datetime (used in template)
     await _dashboard_convert_ping_to_datetime(workers)
@@ -124,7 +121,7 @@ async def dashboard(request: Request):
     )
 
     # --- Worker Ranking Diff Logic ---
-    context = await _dashboard_worker_ranking_diff(logs, logs_by_cat, logs_summary, request, round_trip_time, summary,
+    context = await _dashboard_worker_ranking_diff([], log_progress_list, logs_summary, request, round_trip_time, summary,
                                                    worker_ranking, workers_sorted)
     if worker_ranking:
         # Update cache
@@ -135,7 +132,7 @@ async def dashboard(request: Request):
     return templates.TemplateResponse("dashboard.html", context)
 
 
-async def _dashboard_worker_ranking_diff(logs, logs_by_cat, logs_summary, request, round_trip_time, summary,
+async def _dashboard_worker_ranking_diff(logs, log_progress_list, logs_summary, request, round_trip_time, summary,
                                          worker_ranking, workers_sorted):
     snapshot = load_snapshot()
     ranking_diff = {}
@@ -171,7 +168,7 @@ async def _dashboard_worker_ranking_diff(logs, logs_by_cat, logs_summary, reques
         "request": request,
         "summary": summary,
         "logs": logs,
-        "logs_by_cat": logs_by_cat,
+        "log_progress_list": log_progress_list,
         "workers": workers_sorted,
         "round_trip_time": round_trip_time,
         "worker_ranking": worker_ranking,
@@ -211,9 +208,9 @@ async def _dashboard_split_by_category(logs):
             logs_by_cat["other"].append(log)
     return logs_by_cat
 
-async def get_dashboard_apis(logs, logs_summary, round_trip_time, summary, worker_ranking, workers):
+async def get_dashboard_apis(log_progress_list, logs_summary, round_trip_time, summary, worker_ranking, workers):
     async with httpx.AsyncClient(timeout=15.0) as client:
-        logs = await _dashboard_logs_progress(client, logs, round_trip_time, summary)
+        log_progress_list = await _dashboard_logs_progress(client, log_progress_list, round_trip_time, summary)
 
         # workers_status
         workers = await _dashboard_workers_status(client, round_trip_time, summary, workers)
@@ -223,7 +220,7 @@ async def get_dashboard_apis(logs, logs_summary, round_trip_time, summary, worke
 
         # logs_summary
         logs_summary = await _dashboard_logs_summary(client, logs_summary, round_trip_time, summary)
-    return logs, logs_summary, worker_ranking, workers
+    return log_progress_list, logs_summary, worker_ranking, workers
 
 
 async def _dashboard_logs_summary(client, logs_summary, round_trip_time, summary):
@@ -269,20 +266,19 @@ async def _dashboard_workers_status(client, round_trip_time, summary, workers):
     return workers
 
 
-async def _dashboard_logs_progress(client, logs, round_trip_time, summary):
+async def _dashboard_logs_progress(client, log_progress_list, round_trip_time, summary):
     # logs_progress
     try:
         start_time = time.perf_counter()
         logs_resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/logs_progress")
         round_trip_time.append({"api_name": "logs_progress", "rtt": time.perf_counter() - start_time})
         if logs_resp.status_code == 200:
-            logs_data = logs_resp.json()
-            logs = logs_data.get("logs", [])
-            summary["total"] = logs_data.get("summary", {}).get("total", 0)
+            log_progress_list = logs_resp.json()
+            summary["total"] = sum([log["min_completed_end"] for log in log_progress_list])
     except Exception as e:
         round_trip_time.append({"api_name": "logs_progress", "rtt": None, "error": str(e)})
         summary["logs_progress_error"] = str(e)
-    return logs
+    return log_progress_list
 
 
 @app.get("/unique_certs", response_class=HTMLResponse)
