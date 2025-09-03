@@ -104,12 +104,25 @@ async def on_startup():
     # Delayed initialization of DB engine
     init_engine()
     if BACKGROUND_JOBS_ENABLED:
-        app.state.background_tasks = []
-        app.state.background_tasks.append(start_sth_fetcher())
-        app.state.background_tasks.append(start_worker_liveness_monitor())
-        app.state.background_tasks.append(start_unique_certs_counter())
-        app.state.background_tasks.append(start_log_fetch_progress())
-        logger.info("Background jobs started and tasks stored in app.state.background_tasks")
+        import fcntl
+        lock_file_path = "/tmp/ct_background_jobs.lock"
+        try:
+            lock_file = open(lock_file_path, 'w')
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            logger.info(f"Acquired background jobs lock ({lock_file_path}). Starting background jobs...")
+            app.state.background_tasks = []
+            app.state.background_tasks.append(start_sth_fetcher())
+            app.state.background_tasks.append(start_worker_liveness_monitor())
+            app.state.background_tasks.append(start_unique_certs_counter())
+            app.state.background_tasks.append(start_log_fetch_progress())
+            logger.info("Background jobs started and tasks stored in app.state.background_tasks")
+            app.state.background_jobs_lock_file = lock_file
+        except (IOError, OSError) as e:
+            logger.info(f"Background jobs already running in another process (lock file: {lock_file_path})")
+            try:
+                lock_file.close()
+            except:
+                pass
 
 @app.on_event("shutdown")
 async def on_shutdown():
