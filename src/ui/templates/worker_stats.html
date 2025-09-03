@@ -46,13 +46,21 @@
     <canvas id="statusChart" width="900" height="320" style="margin-bottom:2em;"></canvas>
     <script>
         // Prepare data arrays from Jinja2 context
-        const hourLabels = {{ hour_labels_py | tojson | safe }};
-        const totalJobs = {{ total_jobs_py | tojson | safe }};
-        const completed = {{ completed_py | tojson | safe }};
-        const running = {{ running_py | tojson | safe }};
-        const resumeWait = {{ resume_wait_py | tojson | safe }};
-        const dead = {{ dead_py | tojson | safe }};
-        const completedRate = {{ completed_rate_py | tojson | safe }};
+        let hourLabels = {{ hour_labels_py | tojson | safe }};
+        let totalJobs = {{ total_jobs_py | tojson | safe }};
+        let completed = {{ completed_py | tojson | safe }};
+        let running = {{ running_py | tojson | safe }};
+        let resumeWait = {{ resume_wait_py | tojson | safe }};
+        let dead = {{ dead_py | tojson | safe }};
+        let completedRate = {{ completed_rate_py | tojson | safe }};
+
+        // Reverse arrays for graph (so latest is rightmost)
+        hourLabels = hourLabels.slice().reverse();
+        completed = completed.slice().reverse();
+        running = running.slice().reverse();
+        resumeWait = resumeWait.slice().reverse();
+        dead = dead.slice().reverse();
+        completedRate = completedRate.slice().reverse();
 
         // Chart.js config
         const ctx = document.getElementById('statusChart').getContext('2d');
