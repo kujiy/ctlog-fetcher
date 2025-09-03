@@ -1,4 +1,5 @@
 # ui FastAPI entry point template
+import time
 from logging import getLogger
 
 from asyncache import cached
@@ -16,6 +17,10 @@ from datetime import datetime, timedelta, timezone
 from src.ui.snapshot_utils import load_snapshot, save_snapshot
 
 from src.config import CT_LOG_ENDPOINTS, MANAGER_API_URL_FOR_UI
+
+_unique_certs_ttl_cache = TTLCache(maxsize=128, ttl=300)
+_fetched_certs_ttl_cache = TTLCache(maxsize=128, ttl=300)
+_worker_stats_ttl_cache = TTLCache(maxsize=128, ttl=300)
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 logger = app.logger = getLogger("uvicorn")
@@ -81,7 +86,6 @@ dashboard_cache: dict[str, dict[str, Any]] = {}
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    import time
     cache_key = "dashboard"
     now = datetime.now()
     cache = dashboard_cache.get(cache_key)
@@ -100,83 +104,14 @@ async def dashboard(request: Request):
     logs_summary = None
 
     # Get data from APIs
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        # logs_progress
-        try:
-            start_time = time.perf_counter()
-            logs_resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/logs_progress")
-            round_trip_time.append({"api_name": "logs_progress", "rtt": time.perf_counter() - start_time})
-            if logs_resp.status_code == 200:
-                logs_data = logs_resp.json()
-                logs = logs_data.get("logs", [])
-                summary["total"] = logs_data.get("summary", {}).get("total", 0)
-        except Exception as e:
-            round_trip_time.append({"api_name": "logs_progress", "rtt": None, "error": str(e)})
-            summary["logs_progress_error"] = str(e)
-
-        # workers_status
-        try:
-            start_time = time.perf_counter()
-            workers_resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/workers_status")
-            round_trip_time.append({"api_name": "workers_status", "rtt": time.perf_counter() - start_time})
-            if workers_resp.status_code == 200:
-                workers_data = workers_resp.json()
-                workers = workers_data.get("workers", [])
-                summary.update(workers_data.get("summary", {}))
-                summary["workers"] = sum(1 for w in workers if w.get("status") == "running")
-        except Exception as e:
-            round_trip_time.append({"api_name": "workers_status", "rtt": None, "error": str(e)})
-            summary["workers_status_error"] = str(e)
-
-        # worker_ranking
-        try:
-            start_time = time.perf_counter()
-            ranking_resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/worker_ranking")
-            round_trip_time.append({"api_name": "worker_ranking", "rtt": time.perf_counter() - start_time})
-            if ranking_resp.status_code == 200:
-                worker_ranking = ranking_resp.json()
-                summary['cumulative_worker_names'] = len(worker_ranking['worker_total_count_ranking'])
-        except Exception as e:
-            round_trip_time.append({"api_name": "worker_ranking", "rtt": None, "error": str(e)})
-            summary["worker_ranking_error"] = str(e)
-
-        # logs_summary
-        try:
-            start_time = time.perf_counter()
-            summary_resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/logs_summary")
-            round_trip_time.append({"api_name": "logs_summary", "rtt": time.perf_counter() - start_time})
-            if summary_resp.status_code == 200:
-                logs_summary = summary_resp.json()
-        except Exception as e:
-            round_trip_time.append({"api_name": "logs_summary", "rtt": None, "error": str(e)})
-            summary["logs_summary_error"] = str(e)
+    logs, logs_summary, worker_ranking, workers = await get_dashboard_apis(logs, logs_summary, round_trip_time, summary,
+                                                                           worker_ranking, workers)
 
     # Split by category
-    categories = list(CT_LOG_ENDPOINTS.keys())
-    logs_by_cat = {cat: [] for cat in categories}
-    # Categorize by ct_log_url domain
-    for log in logs:
-        url = log.get("ct_log_url", "").lower()
-        if "cloudflare.com" in url:
-            logs_by_cat["cloudflare"].append(log)
-        elif "googleapis.com" in url:
-            logs_by_cat["google"].append(log)
-        elif "trustasia.com" in url:
-            logs_by_cat["trustasia"].append(log)
-        elif "digicert.com" in url:
-            logs_by_cat["digicert"].append(log)
-        elif "letsencrypt.org" in url:
-            logs_by_cat["letsencrypt"].append(log)
-        else:
-            logs_by_cat["other"].append(log)
+    logs_by_cat = await _dashboard_split_by_category(logs)
 
     # Convert last_ping to datetime (used in template)
-    for w in workers:
-        if isinstance(w.get("last_ping"), str):
-            try:
-                w["last_ping"] = datetime.fromisoformat(w["last_ping"])
-            except Exception:
-                w["last_ping"] = w["last_ping"]
+    await _dashboard_convert_ping_to_datetime(workers)
 
     # Display running workers at the top
     workers_sorted = sorted(
@@ -189,13 +124,28 @@ async def dashboard(request: Request):
     )
 
     # --- Worker Ranking Diff Logic ---
+    context = await _dashboard_worker_ranking_diff(logs, logs_by_cat, logs_summary, request, round_trip_time, summary,
+                                                   worker_ranking, workers_sorted)
+    if worker_ranking:
+        # Update cache
+        dashboard_cache[cache_key] = {
+            "timestamp": now,
+            "context": {**context, "request": None}  # Do not cache request
+        }
+    return templates.TemplateResponse("dashboard.html", context)
+
+
+async def _dashboard_worker_ranking_diff(logs, logs_by_cat, logs_summary, request, round_trip_time, summary,
+                                         worker_ranking, workers_sorted):
     snapshot = load_snapshot()
     ranking_diff = {}
     if worker_ranking and snapshot:
         # Build {worker_name: rank, count, jp_count} for snapshot and current
-        snap_map = {r["worker_name"]: {"rank": i+1, "worker_total_count": r["worker_total_count"], "jp_count": r.get("jp_count", 0)}
+        snap_map = {r["worker_name"]: {"rank": i + 1, "worker_total_count": r["worker_total_count"],
+                                       "jp_count": r.get("jp_count", 0)}
                     for i, r in enumerate(snapshot.get("worker_total_count_ranking", []))}
-        curr_map = {r["worker_name"]: {"rank": i+1, "worker_total_count": r["worker_total_count"], "jp_count": r.get("jp_count", 0)}
+        curr_map = {r["worker_name"]: {"rank": i + 1, "worker_total_count": r["worker_total_count"],
+                                       "jp_count": r.get("jp_count", 0)}
                     for i, r in enumerate(worker_ranking.get("worker_total_count_ranking", []))}
         for name, curr in curr_map.items():
             prev = snap_map.get(name)
@@ -229,21 +179,124 @@ async def dashboard(request: Request):
         "ranking_diff": ranking_diff,
         "snapshot_time": snapshot_time
     }
-    if worker_ranking:
-        # Update cache
-        dashboard_cache[cache_key] = {
-            "timestamp": now,
-            "context": {**context, "request": None}  # Do not cache request
-        }
-    return templates.TemplateResponse("dashboard.html", context)
+    return context
+
+
+async def _dashboard_convert_ping_to_datetime(workers):
+    for w in workers:
+        if isinstance(w.get("last_ping"), str):
+            try:
+                w["last_ping"] = datetime.fromisoformat(w["last_ping"])
+            except Exception:
+                w["last_ping"] = w["last_ping"]
+
+
+async def _dashboard_split_by_category(logs):
+    categories = list(CT_LOG_ENDPOINTS.keys())
+    logs_by_cat = {cat: [] for cat in categories}
+    # Categorize by ct_log_url domain
+    for log in logs:
+        url = log.get("ct_log_url", "").lower()
+        if "cloudflare.com" in url:
+            logs_by_cat["cloudflare"].append(log)
+        elif "googleapis.com" in url:
+            logs_by_cat["google"].append(log)
+        elif "trustasia.com" in url:
+            logs_by_cat["trustasia"].append(log)
+        elif "digicert.com" in url:
+            logs_by_cat["digicert"].append(log)
+        elif "letsencrypt.org" in url:
+            logs_by_cat["letsencrypt"].append(log)
+        else:
+            logs_by_cat["other"].append(log)
+    return logs_by_cat
+
+async def get_dashboard_apis(logs, logs_summary, round_trip_time, summary, worker_ranking, workers):
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        logs = await _dashboard_logs_progress(client, logs, round_trip_time, summary)
+
+        # workers_status
+        workers = await _dashboard_workers_status(client, round_trip_time, summary, workers)
+
+        # worker_ranking
+        worker_ranking = await _dashboard_worker_ranking(client, round_trip_time, summary, worker_ranking)
+
+        # logs_summary
+        logs_summary = await _dashboard_logs_summary(client, logs_summary, round_trip_time, summary)
+    return logs, logs_summary, worker_ranking, workers
+
+
+async def _dashboard_logs_summary(client, logs_summary, round_trip_time, summary):
+    try:
+        start_time = time.perf_counter()
+        summary_resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/logs_summary")
+        round_trip_time.append({"api_name": "logs_summary", "rtt": time.perf_counter() - start_time})
+        if summary_resp.status_code == 200:
+            logs_summary = summary_resp.json()
+    except Exception as e:
+        round_trip_time.append({"api_name": "logs_summary", "rtt": None, "error": str(e)})
+        summary["logs_summary_error"] = str(e)
+    return logs_summary
+
+
+async def _dashboard_worker_ranking(client, round_trip_time, summary, worker_ranking):
+    try:
+        start_time = time.perf_counter()
+        ranking_resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/worker_ranking")
+        round_trip_time.append({"api_name": "worker_ranking", "rtt": time.perf_counter() - start_time})
+        if ranking_resp.status_code == 200:
+            worker_ranking = ranking_resp.json()
+            summary['cumulative_worker_names'] = len(worker_ranking['worker_total_count_ranking'])
+    except Exception as e:
+        round_trip_time.append({"api_name": "worker_ranking", "rtt": None, "error": str(e)})
+        summary["worker_ranking_error"] = str(e)
+    return worker_ranking
+
+
+async def _dashboard_workers_status(client, round_trip_time, summary, workers):
+    try:
+        start_time = time.perf_counter()
+        workers_resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/workers_status")
+        round_trip_time.append({"api_name": "workers_status", "rtt": time.perf_counter() - start_time})
+        if workers_resp.status_code == 200:
+            workers_data = workers_resp.json()
+            workers = workers_data.get("workers", [])
+            summary.update(workers_data.get("summary", {}))
+            summary["workers"] = sum(1 for w in workers if w.get("status") == "running")
+    except Exception as e:
+        round_trip_time.append({"api_name": "workers_status", "rtt": None, "error": str(e)})
+        summary["workers_status_error"] = str(e)
+    return workers
+
+
+async def _dashboard_logs_progress(client, logs, round_trip_time, summary):
+    # logs_progress
+    try:
+        start_time = time.perf_counter()
+        logs_resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/logs_progress")
+        round_trip_time.append({"api_name": "logs_progress", "rtt": time.perf_counter() - start_time})
+        if logs_resp.status_code == 200:
+            logs_data = logs_resp.json()
+            logs = logs_data.get("logs", [])
+            summary["total"] = logs_data.get("summary", {}).get("total", 0)
+    except Exception as e:
+        round_trip_time.append({"api_name": "logs_progress", "rtt": None, "error": str(e)})
+        summary["logs_progress_error"] = str(e)
+    return logs
+
 
 @app.get("/unique_certs", response_class=HTMLResponse)
 async def unique_certs_page(request: Request):
+    return await _unique_certs_with_cache(request)
 
+@cached(_unique_certs_ttl_cache)
+async def _unique_certs_with_cache(request):
+    """
+    Fetches unique certificate data from the manager API with caching.
+    Returns a rendered template with the data or error message.
+    """
     unique_certs_data = None
     error_message = None
-
-    # Get data from unique_certs API
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/unique_certs")
@@ -253,20 +306,33 @@ async def unique_certs_page(request: Request):
                 error_message = f"API returned status code: {response.status_code}"
     except Exception as e:
         error_message = str(e)
-
+        logger.error(f"_unique_certs_with_cache error: {e}")
     return templates.TemplateResponse("unique_certs.html", {
         "request": request,
         "unique_certs_data": unique_certs_data,
         "error_message": error_message
     })
 
+
 @app.get("/fetched-certs/{worker_name}", response_class=HTMLResponse)
 async def fetched_certs_page(request: Request, worker_name: str):
+    error_message, fetched_certs_data = await _fetched_certs_by_worker_name(worker_name)
+    return templates.TemplateResponse("fetched_certs.html", {
+        "request": request,
+        "worker_name": worker_name,
+        "fetched_certs_data": fetched_certs_data,
+        "error_message": error_message
+    })
 
+
+@cached(_fetched_certs_ttl_cache)
+async def _fetched_certs_by_worker_name(worker_name):
+    """
+    Fetches fetched certificate data for a given worker from the manager API with caching.
+    Returns a rendered template with the data or error message.
+    """
     fetched_certs_data = None
     error_message = None
-
-    # Get data from fetched_certs API
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/fetched_certs/{worker_name}")
@@ -276,21 +342,23 @@ async def fetched_certs_page(request: Request, worker_name: str):
                 error_message = f"API returned status code: {response.status_code}"
     except Exception as e:
         error_message = str(e)
+        logger.error(f"_fetched_certs_with_cache error: {e}")
+    return error_message, fetched_certs_data
 
-    return templates.TemplateResponse("fetched_certs.html", {
-        "request": request,
-        "worker_name": worker_name,
-        "fetched_certs_data": fetched_certs_data,
-        "error_message": error_message
-    })
 
 @app.get("/worker-stats/{worker_name}", response_class=HTMLResponse)
 async def worker_stats_page(request: Request, worker_name: str):
-    return await _worker_stats_page_with_cache(request, worker_name)
+    stats_data, error_message = await get_worker_stats(worker_name)
+    return templates.TemplateResponse("worker_stats.html", {
+        "request": request,
+        "worker_name": worker_name,
+        "log_stats": stats_data["log_stats"] if stats_data else [],
+        "status_stats": stats_data["status_stats"] if stats_data else [],
+        "error_message": error_message
+    })
 
 
-_worker_stats_cache = TTLCache(maxsize=128, ttl=300)
-@cached(_worker_stats_cache)
+@cached(_worker_stats_ttl_cache)
 async def get_worker_stats(worker_name):
     stats_data = None
     error_message = None
@@ -304,16 +372,6 @@ async def get_worker_stats(worker_name):
     except Exception as e:
         error_message = str(e)
     return stats_data, error_message
-
-async def _worker_stats_page_with_cache(request, worker_name):
-    stats_data, error_message = await get_worker_stats(worker_name)
-    return templates.TemplateResponse("worker_stats.html", {
-        "request": request,
-        "worker_name": worker_name,
-        "log_stats": stats_data["log_stats"] if stats_data else [],
-        "status_stats": stats_data["status_stats"] if stats_data else [],
-        "error_message": error_message
-    })
 
 
 # API example: Get collection status
