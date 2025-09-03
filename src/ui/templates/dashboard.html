@@ -151,22 +151,16 @@
                 <th>Total Tree Size</th>
                 <th>Fetched Tree Size</th>
                 <th>ETA (days)</th>
-                <th>Total .jp Count</th>
-                <th>Total .jp Ratio</th>
                 <th>Unique .jp Count</th>
-                <th>Unique .jp Ratio</th>
                 <th>Progress</th>
             </tr>
             <tr>
                 <td>{{ "{:,}".format(logs_summary.total_tree_size) }}</td>
                 <td>{{ "{:,}".format(logs_summary.fetched_tree_size) }}</td>
                 <td>{% if logs_summary.eta_days is not none %}{{ logs_summary.eta_days }}{% else %}-{% endif %}</td>
-                <td>{{ "{:,}".format(logs_summary.total_jp) }}</td>
-                <td>{{ '%.2f' % (logs_summary.jp_ratio * 100) }}%</td>
                 <td class="highlight-green">
                     <a href="/unique_certs" style="text-decoration: none; color: #3498db; margin-right: 1em;">{{ "{:,}".format(logs_summary.unique_jp_count) }}</a>
                 </td>
-                <td>{{ '%.2f' % (logs_summary.unique_jp_ratio * 100) }}%</td>
                 <td>
                     {% set percent = logs_summary.fetched_rate * 100 %}
                     <div class="progress-bar"><div class="progress" style="width: {{ percent|int }}%"></div></div>

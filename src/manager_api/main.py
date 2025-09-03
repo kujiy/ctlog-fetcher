@@ -397,25 +397,18 @@ async def upload_certificates(
 # --- Overall Progress API ---
 @app.get("/api/logs_summary")
 async def get_logs_summary(db=Depends(get_async_session)):
-
-    # --- Total tree size ---
-    sth_rows_stmt = select(
-        CTLogSTH.log_name, func.max(CTLogSTH.fetched_at).label('max_fetched_at')
-    ).group_by(CTLogSTH.log_name).subquery()
-    total_tree_stmt = select(func.sum(CTLogSTH.tree_size)).join(
-        sth_rows_stmt,
-        (CTLogSTH.log_name == sth_rows_stmt.c.log_name) & (CTLogSTH.fetched_at == sth_rows_stmt.c.max_fetched_at)
+    # Get sum from LogFetchProgress table using ORM-style result access
+    stmt = select(
+        func.sum(LogFetchProgress.sth_end).label("total_tree_size"),
+        func.sum(LogFetchProgress.min_completed_end).label("fetched_tree_size"),
+        (func.sum(LogFetchProgress.min_completed_end) / func.nullif(func.sum(LogFetchProgress.sth_end), 0)).label("fetched_rate")
     )
-    total_tree_size = (await db.execute(total_tree_stmt)).scalar() or 0
+    result = await db.execute(stmt)
+    row = result.first()
 
-    # --- Fetched tree size (from summary table) ---
-    fetched_tree_stmt = select(func.sum(WorkerLogStat.worker_total_count))
-    fetched_tree_size = (await db.execute(fetched_tree_stmt)).scalar() or 0
-    if fetched_tree_size < 0:
-        fetched_tree_size = 0
-
-    # --- Fetched rate ---
-    fetched_rate = (fetched_tree_size / total_tree_size) if total_tree_size > 0 else 0
+    total_tree_size = row.total_tree_size if row and row.total_tree_size is not None else 0
+    fetched_tree_size = row.fetched_tree_size if row and row.fetched_tree_size is not None else 0
+    fetched_rate = row.fetched_rate if row and row.fetched_rate is not None else 0
 
     # --- ETA (days) ---
     today = ETA_BASE_DATE
@@ -427,26 +420,15 @@ async def get_logs_summary(db=Depends(get_async_session)):
     elif fetched_rate >= 1:
         eta_days = 0
 
-    # --- .jp count and ratio (from summary table) ---
-    total_jp_stmt = select(func.sum(WorkerLogStat.jp_count_sum))
-    total_jp = (await db.execute(total_jp_stmt)).scalar() or 0
-    jp_ratio = (total_jp / fetched_tree_size) if fetched_tree_size > 0 else 0
-
     # --- Unique .jp count ---
     unique_jp_count = get_unique_certs_count()
-
-    # --- Unique .jp ratio ---
-    unique_jp_ratio = (unique_jp_count / fetched_tree_size) if isinstance(unique_jp_count, int) and fetched_tree_size > 0 else 0
 
     return {
         "total_tree_size": total_tree_size,
         "fetched_tree_size": fetched_tree_size,
         "fetched_rate": fetched_rate,
         "eta_days": eta_days,
-        "total_jp": total_jp,
-        "jp_ratio": jp_ratio,
         "unique_jp_count": unique_jp_count,
-        "unique_jp_ratio": unique_jp_ratio
     }
 
 
