@@ -861,8 +861,9 @@ async def get_worker_stats(worker_name: str, db=Depends(get_async_session)):
         "log_stats": log_stats,
         "status_stats": status_stats,
     }
-_tree_size_cache = TTLCache(maxsize=100, ttl=60)
 
+
+_tree_size_cache = TTLCache(maxsize=100, ttl=60)
 @cached(_tree_size_cache)
 async def get_tree_size(ct_log_url, db):
     stmt = select(CTLogSTH.tree_size).where(CTLogSTH.ct_log_url == ct_log_url).order_by(CTLogSTH.fetched_at.desc())

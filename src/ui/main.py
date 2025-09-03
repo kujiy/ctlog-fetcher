@@ -1,6 +1,8 @@
 # ui FastAPI entry point template
 from logging import getLogger
 
+from asyncache import cached
+from cachetools import TTLCache
 from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
@@ -284,9 +286,14 @@ async def fetched_certs_page(request: Request, worker_name: str):
 
 @app.get("/worker-stats/{worker_name}", response_class=HTMLResponse)
 async def worker_stats_page(request: Request, worker_name: str):
+    return await _worker_stats_page_with_cache(request, worker_name)
+
+
+_worker_stats_cache = TTLCache(maxsize=128, ttl=300)
+@cached(_worker_stats_cache)
+async def get_worker_stats(worker_name):
     stats_data = None
     error_message = None
-
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/worker_stats/{worker_name}")
@@ -296,7 +303,10 @@ async def worker_stats_page(request: Request, worker_name: str):
                 error_message = f"API returned status code: {response.status_code}"
     except Exception as e:
         error_message = str(e)
+    return stats_data, error_message
 
+async def _worker_stats_page_with_cache(request, worker_name):
+    stats_data, error_message = await get_worker_stats(worker_name)
     return templates.TemplateResponse("worker_stats.html", {
         "request": request,
         "worker_name": worker_name,
@@ -304,6 +314,7 @@ async def worker_stats_page(request: Request, worker_name: str):
         "status_stats": stats_data["status_stats"] if stats_data else [],
         "error_message": error_message
     })
+
 
 # API example: Get collection status
 @app.get("/api/ui/status")
