@@ -10,7 +10,7 @@ def test_upload_api_integration():
         file_json = json.load(f)
     data = file_json["data"]
 
-    url = "http://ctlog-fetcher.tplinkdns.com:1173/api/worker/upload"
+    url = "http://localhost:1173/api/worker/upload"
     response = requests.post(url, json=data)
     logger.warning(f"status_code={response.status_code}")
     # assert response.status_code == 200
@@ -27,7 +27,7 @@ def test_completed_api_integration():
         file_json = json.load(f)
     data = file_json["data"]
 
-    url = "http://ctlog-fetcher.tplinkdns.com:1173/api/worker/completed"
+    url = "http://localhost:1173/api/worker/completed"
     response = requests.post(url, json=data)
     logger.warning(f"status_code={response.status_code}")
     # assert response.status_code == 200

@@ -14,7 +14,7 @@ from .models import CTLogSTH, WorkerLogStat, WorkerStatus, Cert, LogFetchProgres
 from src.share.cert_parser import JPCertificateParser
 from sqlalchemy import func, and_, select, cast, Float
 
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, DataError
 from .db import get_async_session, init_engine
 from datetime import datetime, timedelta, timezone
 import asyncio
@@ -395,6 +395,20 @@ async def upload_certificates(
                     skipped_duplicates += 1
                     # Add to cache as duplicate (for skipping next time)
                     await cert_cache.add(cert.issuer, cert.serial_number, cert.certificate_fingerprint_sha256)
+        except DataError as e:
+            # Only handle ct_index out of range error
+            if ("Out of range value for column 'ct_index'" in str(e)):
+                # Save request to pending/upload_failure as JSON
+                os.makedirs("pending/upload_failure", exist_ok=True)
+                now = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+                rand = random.randint(1000, 9999)
+                filename = f"pending/upload_failure/upload_failure_{now}_{rand}.json"
+                with open(filename, "w", encoding="utf-8") as f:
+                    json.dump([item.dict() for item in items], f, ensure_ascii=False, indent=2)
+                logger.warning(f"[upload_certificates] Out of range ct_index error. Saved request to {filename}")
+                return {"inserted": 0, "skipped_duplicates": 0}
+            else:
+                raise
 
     # Output cache statistics to log (for debugging)
     if logger.isEnabledFor(logging.DEBUG):
