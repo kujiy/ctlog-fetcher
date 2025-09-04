@@ -35,7 +35,7 @@ class Cert(Base):
     is_precertificate = Column(Boolean, default=None)
 
     log_name = Column(String(64))
-    ct_index = Column(Integer, default=None)  # index within the log
+    ct_index = Column(BigInteger, default=None)  # index within the log
     ct_log_url = Column(String(256))
     worker_name = Column(String(64))
     created_at = Column(DateTime)
@@ -83,10 +83,10 @@ class WorkerStatus(Base):
     worker_name = Column(String(64))
     log_name = Column(String(64))
     ct_log_url = Column(String(256))
-    start = Column(Integer)
-    end = Column(Integer)
-    current = Column(Integer)                        # All indices up to this are processed
-    last_uploaded_index = Column(Integer, default=None)    # Last index where upload succeeded
+    start = Column(BigInteger)
+    end = Column(BigInteger)
+    current = Column(BigInteger)                        # All indices up to this are processed
+    last_uploaded_index = Column(BigInteger, default=None)    # Last index where upload succeeded
     status = Column(String(32))  # running, finished, resume_wait, etc
     last_ping = Column(DateTime)
     ip_address = Column(String(64), default=None)
@@ -173,8 +173,8 @@ class WorkerLogStat(Base):
     id = Column(Integer, primary_key=True)
     log_name = Column(String(64), index=True, nullable=False)
     worker_name = Column(String(64), index=True, nullable=False)
-    worker_total_count = Column(Integer, default=0)
-    jp_count_sum = Column(Integer, default=0)
+    worker_total_count = Column(BigInteger, default=0)
+    jp_count_sum = Column(BigInteger, default=0)
     last_updated = Column(DateTime)
     # Add other necessary statistics if needed
 
