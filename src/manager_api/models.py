@@ -90,7 +90,7 @@ class WorkerStatus(Base):
     status = Column(String(32))  # running, finished, resume_wait, etc
     last_ping = Column(DateTime)
     ip_address = Column(String(64), default=None)
-    jp_count = Column(Integer, default=0)
+    jp_count = Column(BigInteger, default=0)
     jp_ratio = Column(Integer, default=0)
 
     # Indexes for performance optimization
