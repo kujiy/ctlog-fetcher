@@ -58,4 +58,3 @@ urllib3==2.5.0
 uvicorn==0.35.0
 yarl==1.20.1
 prometheus-client
-asynccache
