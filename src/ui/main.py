@@ -17,11 +17,11 @@ import traceback
 
 from src.ui.snapshot_utils import load_snapshot, save_snapshot
 
-from src.config import CT_LOG_ENDPOINTS, MANAGER_API_URL_FOR_UI
+from src.config import CT_LOG_ENDPOINTS, MANAGER_API_URL_FOR_UI, METRICS_URL
 
-# _unique_certs_ttl_cache = TTLCache(maxsize=128, ttl=300)
-# _fetched_certs_ttl_cache = TTLCache(maxsize=128, ttl=300)
-# _worker_stats_ttl_cache = TTLCache(maxsize=128, ttl=300)
+_unique_certs_ttl_cache = TTLCache(maxsize=128, ttl=300)
+_fetched_certs_ttl_cache = TTLCache(maxsize=128, ttl=300)
+_worker_stats_ttl_cache = TTLCache(maxsize=128, ttl=300)
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 logger = app.logger = getLogger("uvicorn")
@@ -286,7 +286,7 @@ async def _dashboard_logs_progress(client, log_progress_list, round_trip_time, s
 async def unique_certs_page(request: Request):
     return await _unique_certs_with_cache(request)
 
-# @cached(_unique_certs_ttl_cache)
+@cached(_unique_certs_ttl_cache)
 async def _unique_certs_with_cache(request):
     """
     Fetches unique certificate data from the manager API with caching.
@@ -322,7 +322,7 @@ async def fetched_certs_page(request: Request, worker_name: str):
     })
 
 
-# @cached(_fetched_certs_ttl_cache)
+@cached(_fetched_certs_ttl_cache)
 async def _fetched_certs_by_worker_name(worker_name):
     """
     Fetches fetched certificate data for a given worker from the manager API with caching.
@@ -355,7 +355,7 @@ async def worker_stats_page(request: Request, worker_name: str):
     })
 
 
-# @cached(_worker_stats_ttl_cache)
+@cached(_worker_stats_ttl_cache)
 async def get_worker_stats(worker_name):
     stats_data = None
     error_message = None
@@ -381,7 +381,7 @@ async def metrics_page(request: Request):
     error_message = None
     try:
         async with httpx.AsyncClient() as client:
-            resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/metrics")
+            resp = await client.get(f"{METRICS_URL}/metrics")
             if resp.status_code == 200:
                 text = resp.text
                 metrics = parse_metrics_text(text)
