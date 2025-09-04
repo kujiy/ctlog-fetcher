@@ -114,7 +114,7 @@ async def batch_job():
             await fetch_and_update_unique_cert_counter()
         except Exception as e:
             logger.error(f"[unique_cert_counter_sqlite_counter] Error in batch job: {e}")
-        await asyncio.sleep(6)  # mins
+        await asyncio.sleep(60 * 13)  # mins
 
 def start_unique_cert_counter_sqlite_counter():
     task = asyncio.create_task(batch_job())
