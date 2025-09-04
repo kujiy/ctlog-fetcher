@@ -12,7 +12,8 @@ from typing import List
 from .metrics import LatencySamplingMiddleware
 from .models import CTLogSTH, WorkerLogStat, WorkerStatus, Cert, LogFetchProgress
 from src.share.cert_parser import JPCertificateParser
-from sqlalchemy import func, and_, select
+from sqlalchemy import func, and_, select, cast, Float
+
 from sqlalchemy.exc import IntegrityError
 from .db import get_async_session, init_engine
 from datetime import datetime, timedelta, timezone
@@ -53,6 +54,19 @@ locks = defaultdict(asyncio.Lock)
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 logger = app.logger = logging.getLogger("manager_api")
 app.add_middleware(LatencySamplingMiddleware)
+
+
+# --- fetch_rate > 0.99 な log_nameリスト取得関数（1時間キャッシュ） ---
+_fetch99_cache = TTLCache(maxsize=100, ttl=3600)
+
+@cached(_fetch99_cache)
+async def get_almost_completed_log_names(db, category):
+    stmt = select(LogFetchProgress.log_name).where(
+        LogFetchProgress.category == category,
+        cast(LogFetchProgress.fetch_rate, Float) > 0.99
+    )
+    rows = (await db.execute(stmt)).all()
+    return [row[0] for row in rows]
 
 
 @app.get("/metrics")
@@ -147,9 +161,10 @@ async def get_next_task(
             return {"message": f"Invalid category: {category}"}
 
         endpoints = CT_LOG_ENDPOINTS[category]
-        # endpoints = [("xenon2022", "https://ct.googleapis.com/logs/xenon2022/")]  # debug
 
-        # logger.info(f"[next_task] category={category} endpoints={endpoints}")
+        # fetch_rate>0.99なlog_nameを除外
+        exclude_log_names = await get_almost_completed_log_names(db, category)
+        endpoints = [e for e in endpoints if e[0] not in exclude_log_names]
 
         random.shuffle(endpoints)
 
