@@ -213,7 +213,7 @@ async def get_next_task(
     # return job
 
 
-_min_completed_end_cache = TTLCache(maxsize=256, ttl=LOG_FETCH_PROGRESS_TTL)
+_min_completed_end_cache = TTLCache(maxsize=1024, ttl=LOG_FETCH_PROGRESS_TTL)
 
 @cached(_min_completed_end_cache)
 async def get_min_completed_end(db, log_name, category):
@@ -824,7 +824,7 @@ async def get_worker_stats(worker_name: str, db=Depends(get_async_session)):
     }
 
 
-_tree_size_cache = TTLCache(maxsize=100, ttl=60)
+_tree_size_cache = TTLCache(maxsize=100, ttl=300)
 @cached(_tree_size_cache)
 async def get_tree_size(ct_log_url, db):
     stmt = select(CTLogSTH.tree_size).where(CTLogSTH.ct_log_url == ct_log_url).order_by(CTLogSTH.fetched_at.desc())
