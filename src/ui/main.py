@@ -278,7 +278,7 @@ async def _dashboard_logs_progress(client, log_progress_list, round_trip_time, s
             summary["total"] = sum([log["min_completed_end"] for log in log_progress_list])
     except Exception as e:
         round_trip_time.append({"api_name": "logs_progress", "rtt": None, "error": str(e)})
-        summary["logs_progress_error"] = str(e) + str(traceback.format_exc())
+        summary["logs_progress_error"] = str(e) # + str(traceback.format_exc())
     return log_progress_list
 
 
