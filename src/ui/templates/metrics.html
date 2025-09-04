@@ -1,0 +1,39 @@
+{#{% extends "dashboard.html" %}#}
+{% block content %}
+<h2>Metrics</h2>
+{% if error_message %}
+  <div style="color:red;">{{ error_message }}</div>
+{% endif %}
+{% if metrics %}
+  <table border="1" cellpadding="5" cellspacing="0">
+    <thead>
+      <tr>
+        <th>Method</th>
+        <th>Path</th>
+        <th>Count</th>
+        <th>Sum (seconds)</th>
+        <th>Average (seconds)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in metrics %}
+      <tr>
+        <td>{{ row.method }}</td>
+        <td>{{ row.path }}</td>
+        <td>{{ row.count }}</td>
+        <td>{{ "%.3f"|format(row.sum) }}</td>
+        <td>
+          {% if row.count > 0 %}
+            {{ "%.6f"|format(row.sum / row.count) }}
+          {% else %}
+            N/A
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p>No metrics data available.</p>
+{% endif %}
+{% endblock %}
