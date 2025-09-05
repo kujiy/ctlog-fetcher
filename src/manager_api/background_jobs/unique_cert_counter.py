@@ -4,7 +4,7 @@ from datetime import datetime, timezone, timedelta
 
 from src.manager_api.db import get_async_session
 from src.manager_api.models import Cert, UniqueCertCounter
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
 from src.share.logger import logger
 from asyncache import cached
@@ -16,7 +16,13 @@ SLEEP_SEC = 0.5
 JST = timezone(timedelta(hours=9))
 
 async def fetch_and_update_unique_cert_counter():
-    last_max_id = 0
+    # Cold start: get max id from unique_cert_counter
+    async for session in get_async_session():
+        result = await session.execute(
+            select(func.max(UniqueCertCounter.id))
+        )
+        last_max_id = result.scalar() or 0
+        await session.close()
     while True:
         async for session in get_async_session():
             while True:
