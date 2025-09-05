@@ -446,7 +446,7 @@ async def get_logs_summary(db=Depends(get_async_session)):
         eta_days = 0
 
     # --- Unique .jp count ---
-    unique_jp_count = get_unique_cert_counter_count()
+    unique_jp_count = await get_unique_cert_counter_count()
 
     return {
         "total_tree_size": total_tree_size,
