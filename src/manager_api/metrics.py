@@ -44,21 +44,16 @@ class LatencySamplingMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         start = time.perf_counter()
-        try:
-            response = await call_next(request)
-        finally:
-            elapsed = time.perf_counter() - start
+        response = await call_next(request)
+        elapsed = time.perf_counter() - start
 
-            # Sampling decision: always record if over threshold, otherwise record by SAMPLE_RATE
-            should_record = (elapsed >= ALWAYS_RECORD_OVER) or (random.random() < SAMPLE_RATE)
-            if should_record:
-                # Create label only when needed (minimally reduces overhead)
-                route = request.scope.get("route")
-                path_template = getattr(route, "path", raw_path)
+        # Sampling decision: always record if over threshold, otherwise record by SAMPLE_RATE
+        should_record = (elapsed >= ALWAYS_RECORD_OVER) or (random.random() < SAMPLE_RATE)
+        if should_record:
+            # Create label only when needed (minimally reduces overhead)
+            route = request.scope.get("route")
+            path_template = getattr(route, "path", raw_path)
 
-                REQUEST_LATENCY.labels(request.method, path_template).observe(elapsed)
+            REQUEST_LATENCY.labels(request.method, path_template).observe(elapsed)
 
-            if "response" in locals():
-                return response
-            # logger.warning(f"Please ignore {raw_path} from the metrics")
-            return await call_next(request)
+        return response
