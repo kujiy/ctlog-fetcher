@@ -17,6 +17,8 @@ JST = timezone(timedelta(hours=9))
 
 async def fetch_and_update_unique_cert_counter():
     # Cold start: get max id from unique_cert_counter
+    MAX_CACHE_SIZE = 1_000_000
+    cache_set = set()
     async for session in get_async_session():
         result = await session.execute(
             select(func.max(UniqueCertCounter.id))
@@ -39,6 +41,9 @@ async def fetch_and_update_unique_cert_counter():
 
                 # Insert into unique_cert_counter table
                 for row in rows:
+                    triplet = (row.issuer, row.serial_number, row.certificate_fingerprint_sha256)
+                    if triplet in cache_set:
+                        continue
                     try:
                         obj = UniqueCertCounter(
                             id=row.id,
@@ -48,6 +53,8 @@ async def fetch_and_update_unique_cert_counter():
                         )
                         session.add(obj)
                         await session.flush()
+                        if len(cache_set) < MAX_CACHE_SIZE:
+                            cache_set.add(triplet)
                     except IntegrityError as e:
                         await session.rollback()
                         # Ignore unique constraint errors, do not rollback the whole transaction
