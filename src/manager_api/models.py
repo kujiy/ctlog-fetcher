@@ -206,6 +206,16 @@ class LogFetchProgress(Base):
         Index('idx_log_fetch_progress_status', 'status'),
     )
 
+class UniqueCertCounter(Base):
+    __tablename__ = 'unique_cert_counter'
+    id = Column(Integer, primary_key=True)
+    issuer = Column(String(256), nullable=True)
+    serial_number = Column(String(256), nullable=False)
+    certificate_fingerprint_sha256 = Column(String(128), nullable=False)
+    __table_args__ = (
+        Index('idx_unique_cert_counter_unique', 'issuer', 'serial_number', 'certificate_fingerprint_sha256', unique=True),
+    )
+
 # Example DB connection
 #engine = create_engine('mysql+pymysql://root@127.0.0.1:3306/ct')
 # Base.metadata.create_all(engine)
