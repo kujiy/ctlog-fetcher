@@ -20,8 +20,8 @@ def get_state_path():
 
 async def main():
     batch_size = 500
-    start_id = 1 
-    print(f"Processing certs.id from {start_id} in batches of {batch_size} (LIMIT方式)")
+    start_id = 1
+    print(f"Processing certs.id from {start_id} in batches of {batch_size} (LIMIT)")
     async for session in get_async_session():
         while True:
             start_time = time.time()
