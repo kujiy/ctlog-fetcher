@@ -70,7 +70,7 @@ async def sth_by_log_name(log_name, session):
 async def extract_info(min_completed_end, sth_end):
     if min_completed_end is not None and sth_end is not None:
         if sth_end > 0:
-            fetch_rate = str(round(min_completed_end / sth_end, 6))
+            fetch_rate = round(min_completed_end / sth_end, 6)
         else:
             fetch_rate = None
 

@@ -1,7 +1,7 @@
 # MySQL table definitions (initial draft)
 # Reference: cert_parser.py
 
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, create_engine, BigInteger, Text, Index
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, create_engine, BigInteger, Text, Index, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -197,7 +197,7 @@ class LogFetchProgress(Base):
     log_name = Column(String(64), index=True, nullable=False)
     min_completed_end = Column(BigInteger, nullable=True)
     sth_end = Column(BigInteger, nullable=True)
-    fetch_rate = Column(String(32), nullable=True)  # 取得率 (float as string for compatibility)
+    fetch_rate = Column(Float, nullable=True)  # 取得率
     status = Column(String(32), nullable=False)  # "completed" or "in_progress"
     updated_at = Column(DateTime, nullable=False)
 

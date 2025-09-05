@@ -63,7 +63,7 @@ _fetch99_cache = TTLCache(maxsize=100, ttl=3600)
 async def get_almost_completed_log_names(db, category):
     stmt = select(LogFetchProgress.log_name).where(
         LogFetchProgress.category == category,
-        cast(LogFetchProgress.fetch_rate, Float) > 0.99
+        LogFetchProgress.fetch_rate > 0.99
     )
     rows = (await db.execute(stmt)).all()
     return [row[0] for row in rows]
@@ -367,7 +367,6 @@ async def upload_certificates(
     # Batch INSERT (prevent duplicates with DB constraints)
     if certs_to_insert:
         try:
-            1/0
             # Try batch insert
             db.add_all(certs_to_insert)
             await db.commit()
