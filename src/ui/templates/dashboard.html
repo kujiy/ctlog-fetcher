@@ -194,7 +194,15 @@
                 <th class="{% if completed %}highlight-green{% endif %}">{{ log.log_name }}</th>
                 <td>{{ "{:,}".format(log.sth_end) if log.sth_end is not none else '-' }}</td>
                 <td>{{ "{:,}".format(log.min_completed_end) if log.min_completed_end is not none else '-' }}</td>
-                <td>{{ "{:,}".format(log.sth_end - log.min_completed_end) if log.sth_end is not none and log.min_completed_end is not none else '-' }}</td>
+                <td>
+                    {% if log.sth_end is not none and log.min_completed_end is not none %}
+                        {% set remaining = log.sth_end - log.min_completed_end %}
+                        {% set batches = (remaining // 16000) + (1 if remaining % 16000 > 0 else 0) %}
+                        {{ "{:,}".format(remaining) }}
+                        <span class="diff"> ({{ batches }} jobs)</span>
+                    {% endif %}
+
+                </td>
                 <td>{{ log.status }}</td>
                 <td>
                     <div class="progress-bar"><div class="progress" style="width: {{ percent|int }}%"></div></div>
