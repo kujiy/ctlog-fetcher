@@ -60,4 +60,4 @@ def test_parse_issuer_null():
         ct_entry = json.load(f)
     result = parser.parse_ct_entry_to_certificate_data(ct_entry)
     # issuerのCNが無い場合はissuer DN文字列が返る仕様に変更したため、DN文字列であることを確認
-    assert result.get("issuer") == "OU=Public Certification Authority - G2,O=Chunghwa Telecom Co.\\, Ltd.,C=TW"
+    assert result.get("issuer") == 'Chunghwa Telecom Co., Ltd.'

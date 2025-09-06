@@ -22,6 +22,10 @@ def analyze_certificate_extensions(cert_data):
         print(f"✅ Certificate loaded successfully")
         print(f"📋 Subject: {certificate.subject}")
         print(f"🏢 Issuer: {certificate.issuer}")
+        # IssuerをO, CN など個別に表示
+        print("   Issuer details:")
+        for attr in certificate.issuer:
+            print(f"      {attr.oid._name}: {attr.value}")
         print(f"🔢 Serial number: {certificate.serial_number}")
         print(f"📅 Valid from: {certificate.not_valid_before_utc}")
         print(f"📅 Valid until: {certificate.not_valid_after_utc}")
