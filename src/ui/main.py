@@ -92,6 +92,10 @@ async def dashboard(request: Request):
 async def _dashboard_worker_ranking_diff(logs, log_progress_list, logs_summary, request, round_trip_time, summary,
                                          worker_ranking, workers_sorted):
     ranking_diff, snapshot_time = await get_snapshot_diff(worker_ranking)
+    # Calculate completed logs
+    completed_logs = sum(1 for log in log_progress_list if log["fetch_rate"] * 100 > 99)
+    total_logs = len(log_progress_list)
+
     context = {
         "request": request,
         "summary": summary,
@@ -102,7 +106,9 @@ async def _dashboard_worker_ranking_diff(logs, log_progress_list, logs_summary, 
         "worker_ranking": worker_ranking,
         "logs_summary": logs_summary,
         "ranking_diff": ranking_diff,
-        "snapshot_time": snapshot_time
+        "snapshot_time": snapshot_time,
+        "completed_logs": completed_logs,
+        "total_logs": total_logs
     }
     return context
 

@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 from src.config import WORKER_LIVENESS_TTL, WORKER_DEAD_THRESHOLD_MINS
+from src.share.job_status import JobStatus
 from .. import models
 from ..db import get_async_session
 JST = timezone(timedelta(hours=9))
@@ -17,7 +18,7 @@ async def worker_liveness_monitor():
                 threshold = now - timedelta(minutes=WORKER_DEAD_THRESHOLD_MINS)
                 result = await session.execute(
                     models.WorkerStatus.__table__.select().where(
-                        models.WorkerStatus.status.in_(['running', 'resume_wait'])
+                        models.WorkerStatus.status.in_([JobStatus.RUNNING.value, JobStatus.RESUME_WAIT.value])
                     )
                 )
                 workers = result.fetchall()
@@ -35,7 +36,7 @@ async def worker_liveness_monitor():
                         await session.execute(
                             models.WorkerStatus.__table__.update()
                             .where(models.WorkerStatus.id == w.id)
-                            .values(status='dead')
+                            .values(status=JobStatus.DEAD.value)
                         )
                 await session.commit()
             await asyncio.sleep(WORKER_LIVENESS_TTL)
