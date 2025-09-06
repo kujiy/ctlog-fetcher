@@ -421,7 +421,7 @@ def category_job_manager(category, args, global_tasks, my_stop_event):
     """Manager to sequentially fetch and execute jobs for each category (ThreadPoolExecutor version)"""
     last_job = None
     fail_count = 0
-    MAX_FAIL = 3
+    MAX_FAIL = 6
     task = None
     ctlog_request_interval_sec = 1
 
@@ -455,7 +455,7 @@ def category_job_manager(category, args, global_tasks, my_stop_event):
                     logger.debug(f"{category}: failed to get next_task: {resp.status_code}")
                     fail_count += 1
                     # Wait for 2 seconds, but return immediately if stop_event is set
-                    sleep_with_stop_check(2, my_stop_event)
+                    sleep_with_stop_check(10, my_stop_event)
 
                     # Try several times, and if it still fails, generate the task autonomously
                     result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, [task], args)
