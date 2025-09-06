@@ -1,38 +1,38 @@
 import os
+import json
 import asyncio
 import httpx
 from datetime import datetime, timedelta, timezone
 from logging import getLogger
-from src.ui.snapshot_utils import load_snapshot, save_snapshot
 from src.config import MANAGER_API_URL_FOR_UI
 
 logger = getLogger("uvicorn")
 JST = timezone(timedelta(hours=9))
+SNAPSHOT_PATH = os.path.join(os.path.dirname(__file__), "../snapshot.json")
 
-async def snapshot_job():
-    while True:
-        try:
-            # Wait until 9:30 JST
-            now = datetime.now(JST)
-            target = now.replace(hour=9, minute=30, second=0, microsecond=0)
-            if now >= target:
-                # If already past 9:30 today, schedule for tomorrow
-                target = target + timedelta(days=1)
-            wait_sec = (target - now).total_seconds()
-            await asyncio.sleep(wait_sec)
-            # After waiting, update snapshot
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/worker_ranking")
-                if resp.status_code == 200:
-                    save_snapshot(resp.json())
-                    logger.info("snapshot.json updated at 9:30 JST")
-        except Exception as e:
-            logger.error(f"Snapshot job error: {e}")
-        # Sleep 1 hour as fallback
-        await asyncio.sleep(3600)
+def load_snapshot():
+    if not os.path.exists(SNAPSHOT_PATH):
+        return None
+    with open(SNAPSHOT_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-def should_update_snapshot(snapshot_path):
-    if not os.path.exists(snapshot_path):
+def save_snapshot(worker_ranking):
+    data = {
+        "timestamp": datetime.now(JST).isoformat(),
+        "worker_total_count_ranking": [
+            {
+                "worker_name": r["worker_name"],
+                "worker_total_count": r["worker_total_count"],
+                "jp_count": r.get("jp_count", 0)
+            }
+            for r in worker_ranking.get("worker_total_count_ranking", [])
+        ]
+    }
+    with open(SNAPSHOT_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def should_update_snapshot():
+    if not os.path.exists(SNAPSHOT_PATH):
         return True
     try:
         snapshot = load_snapshot()
@@ -51,18 +51,22 @@ def should_update_snapshot(snapshot_path):
         logger.error(f"Failed to check snapshot.json timestamp: {e}")
         return True
 
-async def run_snapshot_startup():
-    # On startup: create or update snapshot.json if missing or outdated
-    snapshot_path = os.path.join(os.path.dirname(__file__), "../snapshot.json")
-    if should_update_snapshot(snapshot_path):
+async def background_snapshot_job():
+    while True:
         try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/worker_ranking")
-                if resp.status_code == 200:
-                    save_snapshot(resp.json())
-                    logger.info("snapshot.json created or updated on startup")
+            if should_update_snapshot():
+                async with httpx.AsyncClient() as client:
+                    resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/worker_ranking")
+                    if resp.status_code == 200:
+                        save_snapshot(resp.json())
+                        logger.info("snapshot.json created or updated")
+            # Sleep until next 9:30 JST
+            now = datetime.now(JST)
+            next_930 = now.replace(hour=9, minute=30, second=0, microsecond=0)
+            if now >= next_930:
+                next_930 += timedelta(days=1)
+            wait_sec = (next_930 - now).total_seconds()
+            await asyncio.sleep(wait_sec)
         except Exception as e:
-            logger.error(f"Initial snapshot creation/update failed: {e}")
-
-    # Start background job
-    asyncio.create_task(snapshot_job())
+            logger.error(f"Snapshot job error: {e}")
+            await asyncio.sleep(3600)

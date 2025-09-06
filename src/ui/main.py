@@ -14,8 +14,7 @@ import asyncio
 import httpx
 from datetime import datetime, timedelta, timezone
 import traceback
-from src.ui.snapshot_utils import load_snapshot
-from src.ui.background_jobs.snapshot_job import run_snapshot_startup
+from src.ui.background_jobs.snapshot_job import background_snapshot_job, load_snapshot
 from src.config import CT_LOG_ENDPOINTS, MANAGER_API_URL_FOR_UI, METRICS_URL
 
 _unique_certs_ttl_cache = TTLCache(maxsize=128, ttl=300)
@@ -34,7 +33,7 @@ JST = timezone(timedelta(hours=9))
 
 @app.on_event("startup")
 async def start_snapshot_job():
-    await run_snapshot_startup()
+    asyncio.create_task(background_snapshot_job())
 
 logger.warning(f"MANAGER_API_URL: {MANAGER_API_URL_FOR_UI}")
 
@@ -102,6 +101,23 @@ async def dashboard(request: Request):
 
 async def _dashboard_worker_ranking_diff(logs, log_progress_list, logs_summary, request, round_trip_time, summary,
                                          worker_ranking, workers_sorted):
+    ranking_diff, snapshot_time = await get_snapshot_diff(worker_ranking)
+    context = {
+        "request": request,
+        "summary": summary,
+        "logs": logs,
+        "log_progress_list": log_progress_list,
+        "workers": workers_sorted,
+        "round_trip_time": round_trip_time,
+        "worker_ranking": worker_ranking,
+        "logs_summary": logs_summary,
+        "ranking_diff": ranking_diff,
+        "snapshot_time": snapshot_time
+    }
+    return context
+
+
+async def get_snapshot_diff(worker_ranking):
     snapshot = load_snapshot()
     ranking_diff = {}
     if worker_ranking and snapshot:
@@ -132,19 +148,7 @@ async def _dashboard_worker_ranking_diff(logs, log_progress_list, logs_summary, 
     snapshot_time = None
     if snapshot and "timestamp" in snapshot:
         snapshot_time = datetime.fromisoformat(snapshot["timestamp"])
-    context = {
-        "request": request,
-        "summary": summary,
-        "logs": logs,
-        "log_progress_list": log_progress_list,
-        "workers": workers_sorted,
-        "round_trip_time": round_trip_time,
-        "worker_ranking": worker_ranking,
-        "logs_summary": logs_summary,
-        "ranking_diff": ranking_diff,
-        "snapshot_time": snapshot_time
-    }
-    return context
+    return ranking_diff, snapshot_time
 
 
 async def _dashboard_convert_ping_to_datetime(workers):
