@@ -62,7 +62,7 @@ async def dashboard(request: Request):
 
 
     # Get data from APIs
-    log_progress_list, logs_summary, worker_ranking, workers, round_trip_time, summary = await get_dashboard_apis()
+    log_progress_list, logs_summary, worker_ranking, workers, round_trip_time, summary = await get_dashboard_apis_wrapper()
 
     # Convert last_ping to datetime (used in template)
     await _dashboard_convert_ping_to_datetime(workers)
@@ -156,8 +156,6 @@ async def _dashboard_convert_ping_to_datetime(workers):
                 w["last_ping"] = w["last_ping"]
 
 
-
-@cached(TTLCache(maxsize=1, ttl=120))
 async def get_dashboard_apis():
     round_trip_time = []
     summary = {"total": 0, "workers": 0}
@@ -177,6 +175,21 @@ async def get_dashboard_apis():
         # logs_summary
         logs_summary = await _dashboard_logs_summary(client, logs_summary, round_trip_time, summary)
     return log_progress_list, logs_summary, worker_ranking, workers, round_trip_time, summary
+
+
+@cached(TTLCache(maxsize=1, ttl=120))
+async def get_dashboard_apis_with_cache():
+    return await get_dashboard_apis()
+
+async def get_dashboard_apis_no_cache():
+    return await get_dashboard_apis()
+
+async def get_dashboard_apis_wrapper():
+    log_progress_list, logs_summary, worker_ranking, workers, round_trip_time, summary = await get_dashboard_apis_with_cache()
+    if worker_ranking:
+        return log_progress_list, logs_summary, worker_ranking, workers, round_trip_time, summary
+    # If cache returned no worker_ranking, call without cache to show the current data immediately
+    return await get_dashboard_apis_no_cache()
 
 
 async def _dashboard_logs_summary(client, logs_summary, round_trip_time, summary):
