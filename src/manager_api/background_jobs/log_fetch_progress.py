@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime
 from sqlalchemy import select, update, insert
-from src.manager_api.models import WorkerStatus, CTLogSTH, LogFetchProgress
+from src.manager_api.models import WorkerStatus, CTLogSTH, LogFetchProgress, LogFetchProgressStatus
 from src.config import CT_LOG_ENDPOINTS, LOG_FETCH_PROGRESS_TTL
 from src.manager_api.db import get_async_session
 from src.share.job_status import JobStatus
@@ -81,9 +81,9 @@ async def extract_info(min_completed_end, max_end):
 
         # Determine status
         if min_completed_end >= max_end:
-            status = "completed"
+            status = LogFetchProgressStatus.COMPLETED.value
         else:
-            status = "in_progress"
+            status = LogFetchProgressStatus.IN_PROGRESS.value
     return fetch_rate, status
 
 

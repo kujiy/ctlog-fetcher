@@ -1,5 +1,6 @@
 # MySQL table definitions (initial draft)
 # Reference: cert_parser.py
+from enum import Enum
 
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, create_engine, BigInteger, Text, Index, Float
 from sqlalchemy.ext.declarative import declarative_base
@@ -205,6 +206,10 @@ class LogFetchProgress(Base):
         Index('idx_log_fetch_progress_cat_log', 'category', 'log_name', unique=True),
         Index('idx_log_fetch_progress_status', 'status'),
     )
+
+class LogFetchProgressStatus(Enum):
+    COMPLETED = "completed"
+    IN_PROGRESS = "in_progress"
 
 class UniqueCertCounter(Base):
     __tablename__ = 'unique_cert_counter'
