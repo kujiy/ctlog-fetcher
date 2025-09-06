@@ -438,7 +438,7 @@ def category_job_manager(category, args, global_tasks, my_stop_event):
                     if not task or "start" not in task:
                         # support the case where the API returns {"message": "all logs completed", "sleep_sec": ...}
                         if isinstance(task, dict) and task.get("message") == "all logs completed":
-                            sleep_sec = int(task.get("sleep_sec", 120))
+                            sleep_sec = int(task.get("sleep_sec", 600))
                             logger.info(f"{category}: collected all log_names, sleeping for {sleep_sec} seconds")
                             sleep_with_stop_check(sleep_sec, my_stop_event)
                         else:

@@ -198,7 +198,7 @@ async def get_next_task(
                 if res:
                     return res
         # If all logs are collected, return sleep instruction to worker
-        return {"message": "all logs completed", "sleep_sec": 120}
+        return {"message": "all logs completed", "sleep_sec": 600}
 
     # # Temporary hardcoded: list of ranges where .jp domains can be obtained
     # hardcoded_jobs = [
