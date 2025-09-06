@@ -39,32 +39,26 @@ async def fetch_and_update_unique_cert_counter():
                 if not rows:
                     break
 
-                # Insert into unique_cert_counter table
+                # Bulk insert into unique_cert_counter table, ignoring duplicates
+                values = []
                 for row in rows:
                     triplet = (row.issuer, row.serial_number, row.certificate_fingerprint_sha256)
                     if triplet in cache_set:
                         continue
-                    try:
-                        obj = UniqueCertCounter(
-                            id=row.id,
-                            issuer=row.issuer,
-                            serial_number=row.serial_number,
-                            certificate_fingerprint_sha256=row.certificate_fingerprint_sha256
-                        )
-                        session.add(obj)
-                        await session.flush()
-                        if len(cache_set) < MAX_CACHE_SIZE:
-                            cache_set.add(triplet)
-                    except IntegrityError as e:
-                        await session.rollback()
-                        # Ignore unique constraint errors, do not rollback the whole transaction
-                        if 'Duplicate entry' in str(e):  # 1062
-                            pass
-                        else:
-                            raise
-                    except Exception as e:
-                        logger.error(f"[unique_cert_counter] insert error: {e}")
-                        await session.rollback()
+                    values.append({
+                        "id": row.id,
+                        "issuer": row.issuer,
+                        "serial_number": row.serial_number,
+                        "certificate_fingerprint_sha256": row.certificate_fingerprint_sha256
+                    })
+                    if len(cache_set) < MAX_CACHE_SIZE:
+                        cache_set.add(triplet)
+                if values:
+                    from sqlalchemy.dialects.mysql import insert as mysql_insert
+                    stmt = mysql_insert(UniqueCertCounter).values(values)
+                    stmt = stmt.prefix_with("IGNORE")
+                    await session.execute(stmt)
+                await session.commit()
 
                 await session.commit()
                 last_max_id = rows[-1].id
