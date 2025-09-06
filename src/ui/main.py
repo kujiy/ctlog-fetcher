@@ -14,9 +14,8 @@ import asyncio
 import httpx
 from datetime import datetime, timedelta, timezone
 import traceback
-
-from src.ui.snapshot_utils import load_snapshot, save_snapshot
-
+from src.ui.snapshot_utils import load_snapshot
+from src.ui.background_jobs.snapshot_job import run_snapshot_startup
 from src.config import CT_LOG_ENDPOINTS, MANAGER_API_URL_FOR_UI, METRICS_URL
 
 _unique_certs_ttl_cache = TTLCache(maxsize=128, ttl=300)
@@ -29,45 +28,13 @@ logger = app.logger = getLogger("uvicorn")
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "templates")
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
 
+JST = timezone(timedelta(hours=9))
+
+
+
 @app.on_event("startup")
 async def start_snapshot_job():
-    async def snapshot_job():
-        while True:
-            try:
-                # Wait until 9:30 JST
-                JST = timezone(timedelta(hours=9))
-                now = datetime.now(JST)
-                target = now.replace(hour=9, minute=30, second=0, microsecond=0)
-                if now >= target:
-                    # If already past 9:30 today, schedule for tomorrow
-                    target = target + timedelta(days=1)
-                wait_sec = (target - now).total_seconds()
-                await asyncio.sleep(wait_sec)
-                # After waiting, update snapshot
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/worker_ranking")
-                    if resp.status_code == 200:
-                        save_snapshot(resp.json())
-                        logger.info("snapshot.json updated at 9:30 JST")
-            except Exception as e:
-                logger.error(f"Snapshot job error: {e}")
-            # Sleep 1 hour as fallback
-            await asyncio.sleep(3600)
-
-    # On startup: create snapshot.json if not exists
-    snapshot_path = os.path.join(os.path.dirname(__file__), "snapshot.json")
-    if not os.path.exists(snapshot_path):
-        try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/worker_ranking")
-                if resp.status_code == 200:
-                    save_snapshot(resp.json())
-                    logger.info("snapshot.json created on startup")
-        except Exception as e:
-            logger.error(f"Initial snapshot creation failed: {e}")
-
-    # Start background job
-    asyncio.create_task(snapshot_job())
+    await run_snapshot_startup()
 
 logger.warning(f"MANAGER_API_URL: {MANAGER_API_URL_FOR_UI}")
 
