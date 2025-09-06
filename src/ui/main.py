@@ -160,25 +160,6 @@ async def _dashboard_convert_ping_to_datetime(workers):
                 w["last_ping"] = w["last_ping"]
 
 
-async def _dashboard_split_by_category(logs):
-    categories = list(CT_LOG_ENDPOINTS.keys())
-    logs_by_cat = {cat: [] for cat in categories}
-    # Categorize by ct_log_url domain
-    for log in logs:
-        url = log.get("ct_log_url", "").lower()
-        if "cloudflare.com" in url:
-            logs_by_cat["cloudflare"].append(log)
-        elif "googleapis.com" in url:
-            logs_by_cat["google"].append(log)
-        elif "trustasia.com" in url:
-            logs_by_cat["trustasia"].append(log)
-        elif "digicert.com" in url:
-            logs_by_cat["digicert"].append(log)
-        elif "letsencrypt.org" in url:
-            logs_by_cat["letsencrypt"].append(log)
-        else:
-            logs_by_cat["other"].append(log)
-    return logs_by_cat
 
 async def get_dashboard_apis(log_progress_list, logs_summary, round_trip_time, summary, worker_ranking, workers):
     async with httpx.AsyncClient(timeout=15.0) as client:
