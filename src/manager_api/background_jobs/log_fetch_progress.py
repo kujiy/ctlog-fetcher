@@ -24,10 +24,11 @@ async def aggregate_log_fetch_progress():
                         logger.debug(f"Fetching {log_name} progress from {ct_log_url}")
                         # Get latest STH for this log_name
                         sth_end = await sth_by_log_name(log_name, session)
+                        max_end = sth_end - 1
 
                         # Find min_completed_end using BATCH_SIZE logic, start from last known
                         min_completed_end = last_completed_map.get((category, log_name), None)
-                        if sth_end is not None:
+                        if max_end is not None:
                             if min_completed_end is not None:
                                 i = min_completed_end + BATCH_SIZE
                             else:
@@ -36,21 +37,24 @@ async def aggregate_log_fetch_progress():
                             completed_ends = await get_all_completed_worker_ends(log_name, session)
                             # set for O(1) lookups that speeds up the loop
                             completed_ends_set = set(completed_ends)
-                            while i <= sth_end:
+                            while i <= max_end:
                                 if i in completed_ends_set:
                                     min_completed_end = i
                                     i += BATCH_SIZE
                                 else:
                                     break
+                            # 100% completion judgment: The last task may be less than BATCH_SIZE, so check if completed up to max_end(sth_end - 1)
+                            if 0 < i - max_end <= BATCH_SIZE and max_end in completed_ends_set:
+                                min_completed_end = max_end
                             # Update cache
                             last_completed_map[(category, log_name)] = min_completed_end
 
                         # Determine fetch_rate
-                        fetch_rate, status = await extract_info(min_completed_end, sth_end)
+                        fetch_rate, status = await extract_info(min_completed_end, max_end)
 
                         # Upsert into LogFetchProgress
                         await upcert_log_fetch_progress(category, fetch_rate, log_name, min_completed_end, now, session,
-                                                        status, sth_end)
+                                                        status, max_end)
                         logger.debug(f"Updated {log_name} progress from {ct_log_url} as min_completed_end={min_completed_end}, sth_end={sth_end}, fetch_rate={fetch_rate}, status={status}")
             await asyncio.sleep(LOG_FETCH_PROGRESS_TTL)
     except asyncio.CancelledError:
@@ -63,26 +67,27 @@ async def sth_by_log_name(log_name, session):
         CTLogSTH.log_name == log_name
     ).order_by(CTLogSTH.fetched_at.desc())
     sth_row = (await session.execute(sth_stmt)).first()
-    sth_end = sth_row[0] - 1 if sth_row and sth_row[0] is not None else None
+    # tree_size is 1-based, convert to 0-based index
+    sth_end = sth_row[0] if sth_row and sth_row[0] is not None else None
     return sth_end
 
 
-async def extract_info(min_completed_end, sth_end):
-    if min_completed_end is not None and sth_end is not None:
-        if sth_end > 0:
-            fetch_rate = round(min_completed_end / sth_end, 6)
+async def extract_info(min_completed_end, max_end):
+    if min_completed_end is not None and max_end is not None:
+        if max_end > 0:
+            fetch_rate = round(min_completed_end / max_end, 6)
         else:
             fetch_rate = None
 
         # Determine status
-        if min_completed_end >= sth_end:
+        if min_completed_end >= max_end:
             status = "completed"
         else:
             status = "in_progress"
     return fetch_rate, status
 
 
-async def upcert_log_fetch_progress(category, fetch_rate, log_name, min_completed_end, now, session, status, sth_end):
+async def upcert_log_fetch_progress(category, fetch_rate, log_name, min_completed_end, now, session, status, max_end):
     existing_stmt = select(LogFetchProgress).where(
         LogFetchProgress.category == category,
         LogFetchProgress.log_name == log_name
@@ -94,7 +99,7 @@ async def upcert_log_fetch_progress(category, fetch_rate, log_name, min_complete
             .where(LogFetchProgress.id == existing.id)
             .values(
                 min_completed_end=min_completed_end,
-                sth_end=sth_end,
+                sth_end=max_end,
                 fetch_rate=fetch_rate,
                 status=status,
                 updated_at=now

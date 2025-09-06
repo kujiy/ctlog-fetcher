@@ -22,7 +22,7 @@ from collections import defaultdict
 from src.share.job_status import JobStatus
 from .certificate_cache import cert_cache
 from ..config import CT_LOG_ENDPOINTS, BACKGROUND_JOBS_ENABLED, ETA_BASE_DATE, LOG_FETCH_PROGRESS_TTL, \
-    WORKER_CTLOG_REQUEST_INTERVAL_SEC, WORKER_PING_INTERVAL_SEC, ORDERED_CATEGORIES
+    WORKER_CTLOG_REQUEST_INTERVAL_SEC, WORKER_PING_INTERVAL_SEC, ORDERED_CATEGORIES, STH_FETCH_INTERVAL_SEC
 from .base_models import WorkerPingModel, WorkerPingBaseModel, WorkerResumeRequestModel, UploadCertItem, WorkerErrorModel
 import datetime as dt
 from ..share.animal import get_worker_emoji
@@ -56,17 +56,45 @@ logger = app.logger = logging.getLogger("manager_api")
 app.add_middleware(LatencySamplingMiddleware)
 
 
-# --- fetch_rate > 0.99 な log_nameリスト取得関数（1時間キャッシュ） ---
-_fetch99_cache = TTLCache(maxsize=100, ttl=3600)
 
-@cached(_fetch99_cache)
+def is_growing_log(log_name, category):
+    """
+    Returns True if the log is still growing (new certs are being added), otherwise False.
+    """
+    # cloudflare: nimbus2026
+    if category == "cloudflare" and log_name == "nimbus2026":
+        return True
+    # letsencrypt: 2026h2
+    if category == "letsencrypt" and log_name == "2026h2":
+        return True
+    # digicert: sphinx2026h2, wyvern2026h2
+    if category == "digicert" and log_name in ["sphinx2026h2", "wyvern2026h2"]:
+        return True
+    # trustasia: log2026a, log2026b
+    if category == "trustasia" and log_name in ["log2026b"]:
+        return True
+    if category == "google" and log_name in ["xenon2026h2", "argon2026h2"]:
+        return True
+    return False
+
+@cached(TTLCache(maxsize=100, ttl=STH_FETCH_INTERVAL_SEC))
 async def get_almost_completed_log_names(db, category):
-    stmt = select(LogFetchProgress.log_name).where(
-        LogFetchProgress.category == category,
-        LogFetchProgress.fetch_rate > 0.99
+    # Get all log_names and their fetch_rate for the category
+    stmt = select(LogFetchProgress.log_name, LogFetchProgress.fetch_rate).where(
+        LogFetchProgress.category == category
     )
     rows = (await db.execute(stmt)).all()
-    return [row[0] for row in rows]
+    result = []
+    for log_name, fetch_rate in rows:
+        if is_growing_log(log_name, category):
+            # For growing logs, exclude if fetch_rate > 0.99
+            if fetch_rate > 0.99:
+                result.append(log_name)
+        else:
+            # For fixed-size logs, exclude only if fetch_rate == 1
+            if fetch_rate == 1:
+                result.append(log_name)
+    return result
 
 
 @app.get("/metrics")
@@ -155,14 +183,14 @@ async def get_next_task(
     category: str = Query(...),
     db=Depends(get_async_session)
 ):
-    # worker_name, category単位でロック
+    # Lock per worker_name and category
     async with locks[(worker_name, category)]:
         if category not in CT_LOG_ENDPOINTS:
             return {"message": f"Invalid category: {category}"}
 
         endpoints = CT_LOG_ENDPOINTS[category]
 
-        # fetch_rate>0.99なlog_nameを除外
+        # Exclude log_name of completed past CT Logs or current CT Logs that have almost been retrieved
         exclude_log_names = await get_almost_completed_log_names(db, category)
         endpoints = [e for e in endpoints if e[0] not in exclude_log_names]
 
@@ -180,7 +208,7 @@ async def get_next_task(
                 i = min_completed_end + BATCH_SIZE
             else:
                 i = BATCH_SIZE - 1
-            max_end = tree_size - 1
+            max_end = tree_size - 1  # CT Log starts from zero, so it exists up to tree_size - 1 in get-sth. Specifying more than this will result in an error.
 
             end_set = await get_end_listby_lob_name_with_running_or_completed(db, log_name, min_completed_end)
             # logger.info(f"[next_task] end_set for {log_name}: {end_set}")
@@ -190,7 +218,11 @@ async def get_next_task(
                 if res:
                     return res
                 i += BATCH_SIZE
-            # end for log_name
+            # Returns tasks ending in tree_size if the last task (max_end) is not included in the end_set
+            if 0 < i - max_end <= BATCH_SIZE and max_end not in end_set:
+                res = await find_next_task(ct_log_url, db, end_set, max_end, log_name, worker_name)
+                if res:
+                    return res
         # If all logs are collected, return sleep instruction to worker
         return {"message": "all logs completed", "sleep_sec": 120}
 
