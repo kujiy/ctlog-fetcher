@@ -165,6 +165,7 @@ async def _dashboard_convert_ping_to_datetime(workers):
 
 
 
+@cached(TTLCache(maxsize=1, ttl=120))
 async def get_dashboard_apis(log_progress_list, logs_summary, round_trip_time, summary, worker_ranking, workers):
     async with httpx.AsyncClient(timeout=15.0) as client:
         log_progress_list = await _dashboard_logs_progress(client, log_progress_list, round_trip_time, summary)
