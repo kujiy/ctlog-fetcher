@@ -9,6 +9,8 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from typing import List
 
+from starlette.requests import ClientDisconnect
+
 from .metrics import LatencySamplingMiddleware
 from .models import CTLogSTH, WorkerLogStat, WorkerStatus, Cert, LogFetchProgress
 from src.share.cert_parser import JPCertificateParser
@@ -81,18 +83,24 @@ def metrics() -> Response:
     multiprocess.MultiProcessCollector(registry)
     return Response(generate_latest(registry), media_type=CONTENT_TYPE_LATEST)
 
-# --- サンプル ---
-@app.get("/work/{n}")
-def work(n: int):
-    time.sleep(n / 10)  # n=100 → 10秒
-    return {"slept": n/10}
-
 
 @app.middleware("http")
 async def store_request_body(request: Request, call_next):
     body = b""
-    async for chunk in request.stream():
-        body += chunk
+    try:
+        async for chunk in request.stream():
+            body += chunk
+    except ClientDisconnect:
+        ## This error occurs when the client disconnects while reading the body. Nothing we can do.
+        # Log metadata and partial data received before disconnection for debugging.
+        logger.warning(
+            f"[ErrorReadingBody:ClientDisconnect] Client disconnected: path={request.url.path}, client={request.client.host}, "
+            f"headers={dict(request.headers)}, params={dict(request.query_params)}, total_received={len(body)}"
+        )
+        # FastAPI cannot send a response because the TCP session is closed, but FastAPI requires a Response to be returned, so return a dummy response.
+        return JSONResponse(
+            {"detail": "Client disconnected during request processing."}, status_code=400
+        )
     request.state.body = body
 
     async def receive():
