@@ -203,7 +203,7 @@
                     {% endif %}
 
                 </td>
-                <td>{{ log.status }}</td>
+                <td>{% if log.status == "completed" %}✅{% endif %} {{ log.status }}</td>
                 <td>
                     <div class="progress-bar"><div class="progress" style="width: {{ percent|int }}%"></div></div>
                     {{ "{:,}".format(log.min_completed_end) }} / {{ "{:,}".format(log.sth_end) }} ({{ '%.2f' % percent }}%)
