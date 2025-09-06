@@ -67,19 +67,9 @@ async def dashboard(request: Request):
     # Convert last_ping to datetime (used in template)
     await _dashboard_convert_ping_to_datetime(workers)
 
-    # Display running workers at the top
-    workers_sorted = sorted(
-        workers,
-        key=lambda w: (
-            w.get("status") != "running",
-            w.get("log_name") or "",
-            w.get("worker_name") or ""
-        )
-    )
-
     # --- Worker Ranking Diff Logic ---
     context = await _dashboard_worker_ranking_diff([], log_progress_list, logs_summary, request, round_trip_time, summary,
-                                                   worker_ranking, workers_sorted)
+                                                   worker_ranking, workers)
     if worker_ranking:
         # Update cache
         dashboard_cache[cache_key] = {

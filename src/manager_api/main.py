@@ -487,9 +487,18 @@ async def get_logs_progress(db=Depends(get_async_session)):
 @app.get("/api/workers_status")
 async def get_workers_status(db=Depends(get_async_session)):
     workers = []
-    # Sort by last_ping desc, then limit to 100 records
-    stmt = select(WorkerStatus).order_by(WorkerStatus.last_ping.desc()).limit(100)
-    last_100 = (await db.execute(stmt)).scalars().all()
+    # Fetch up to 100 records with status=running
+    stmt_running = select(WorkerStatus).where(WorkerStatus.status == JobStatus.RUNNING.value).order_by(WorkerStatus.last_ping.desc()).limit(100)
+    running_workers = (await db.execute(stmt_running)).scalars().all()
+
+    # If fewer than 100 running workers, fetch additional records with other statuses
+    if len(running_workers) == 100:
+        last_100 = running_workers
+    else:
+        remaining_limit = 100 - len(running_workers)
+        stmt_other = select(WorkerStatus).where(WorkerStatus.status != JobStatus.RUNNING.value).order_by(WorkerStatus.last_ping.desc()).limit(remaining_limit)
+        other_workers = (await db.execute(stmt_other)).scalars().all()
+        last_100 = running_workers + other_workers
     for w in last_100:
         expected_total_count = (w.end - w.start + 1) if w.end and w.start is not None else 1
         progress = (w.current - w.start) / expected_total_count if expected_total_count > 0 else 0
@@ -512,7 +521,7 @@ async def get_workers_status(db=Depends(get_async_session)):
         "summary": {
             "workers": len(workers),
             "recent_worker_names": len(set(w['worker_name'] for w in workers)),
-            "last_updated": last_100[0].last_ping.isoformat() if last_100 else "-",
+            "last_updated": last_100[0].last_ping.isoformat() if last_100 and last_100[0].last_ping else "-",
         },
         "workers": workers
     }
