@@ -69,8 +69,14 @@ async def dashboard(request: Request):
     logs_summary = None
 
     # Get data from APIs
-    log_progress_list, logs_summary, worker_ranking, workers = await get_dashboard_apis(log_progress_list, logs_summary, round_trip_time, summary,
-                                                                                  worker_ranking, workers)
+    log_progress_list, logs_summary, worker_ranking, workers = await get_dashboard_apis(
+        log_progress_list,
+        logs_summary,
+        round_trip_time,
+        summary,
+        worker_ranking,
+        workers
+    )
 
     # Convert last_ping to datetime (used in template)
     await _dashboard_convert_ping_to_datetime(workers)
