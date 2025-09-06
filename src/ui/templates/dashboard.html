@@ -186,7 +186,7 @@
             </tr>
             {% for log in log_progress_list %}
             {% set percent = log.fetch_rate * 100 %}
-            {%  set completed = percent > 99.98 %}
+            {%  set completed = percent > 99 %}
             <tr class="{% if completed %}highlight-green{% endif %}">
                 <th class="{% if completed %}highlight-green{% endif %}">{{ log.category }}</th>
                 <th class="{% if completed %}highlight-green{% endif %}">{{ log.log_name }}</th>
