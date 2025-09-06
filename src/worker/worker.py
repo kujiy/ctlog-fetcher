@@ -230,7 +230,7 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
         expect_total_count = end - task.get('start', 0) + 1
         fetched_rate = worker_total_count / expect_total_count
         status_lines[status_key] = (
-            f"[{category}] {console_msg} Commited {fetched_rate*100:.1f}% ({worker_total_count}/{expect_total_count}) | Range: {task['start']} - {task['end']}  | 🇯🇵 Domain: {worker_jp_count} | おみくじ {random.choice(omikuji_list)}"
+            f"[{category}] {console_msg} Commited {fetched_rate*100:.1f}% ({worker_total_count}/{expect_total_count}) | Range: {task['start']} - {task['end']}  | 🇯🇵 Domain: {worker_jp_count} | {random.choice(omikuji_list)}"
         )
     else:
         # Show "❌ Failed." only for abnormal termination(including Ctrl+C)
@@ -239,7 +239,7 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
         expect_total_count = end - task.get('start', 0) + 1
         fetched_rate = worker_total_count / expect_total_count
         status_lines[status_key] = (
-            f"[{category}] {console_msg} Commited {fetched_rate*100:.1f}% ({worker_total_count}/{expect_total_count}) | Range: {task['start']} - {task['end']}  | 🇯🇵 Domain: {worker_jp_count} | おみくじ {random.choice(omikuji_list)}"
+            f"[{category}] {console_msg} Commited {fetched_rate*100:.1f}% ({worker_total_count}/{expect_total_count}) | Range: {task['start']} - {task['end']}  | 🇯🇵 Domain: {worker_jp_count} | {random.choice(omikuji_list)}"
         )
 
     logger.debug(f"[DEBUG] Exit job: category={category} log_name={log_name} current={current} end={end}")
