@@ -17,7 +17,6 @@ import traceback
 from src.ui.background_jobs.snapshot_job import background_snapshot_job, load_snapshot
 from src.config import CT_LOG_ENDPOINTS, MANAGER_API_URL_FOR_UI, METRICS_URL
 
-logger.warning(f"MANAGER_API_URL: {MANAGER_API_URL_FOR_UI}")
 
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
@@ -27,6 +26,7 @@ TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "templates")
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
 
 JST = timezone(timedelta(hours=9))
+logger.warning(f"MANAGER_API_URL: {MANAGER_API_URL_FOR_UI}")
 
 
 
