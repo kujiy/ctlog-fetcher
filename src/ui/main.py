@@ -17,9 +17,8 @@ import traceback
 from src.ui.background_jobs.snapshot_job import background_snapshot_job, load_snapshot
 from src.config import CT_LOG_ENDPOINTS, MANAGER_API_URL_FOR_UI, METRICS_URL
 
-_unique_certs_ttl_cache = TTLCache(maxsize=128, ttl=300)
-_fetched_certs_ttl_cache = TTLCache(maxsize=128, ttl=300)
-_worker_stats_ttl_cache = TTLCache(maxsize=128, ttl=300)
+logger.warning(f"MANAGER_API_URL: {MANAGER_API_URL_FOR_UI}")
+
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 logger = app.logger = getLogger("uvicorn")
@@ -35,7 +34,6 @@ JST = timezone(timedelta(hours=9))
 async def start_snapshot_job():
     asyncio.create_task(background_snapshot_job())
 
-logger.warning(f"MANAGER_API_URL: {MANAGER_API_URL_FOR_UI}")
 
 # Static files (CSS, etc.)
 static_dir = os.path.join(os.path.dirname(__file__), 'static')
@@ -236,10 +234,16 @@ async def _dashboard_logs_progress(client, log_progress_list, round_trip_time, s
 
 @app.get("/unique_certs", response_class=HTMLResponse)
 async def unique_certs_page(request: Request):
-    return await _unique_certs_with_cache(request)
+    unique_certs_data, error_message = await _unique_certs_with_cache()
+    return templates.TemplateResponse("unique_certs.html", {
+        "request": request,
+        "unique_certs_data": unique_certs_data,
+        "error_message": error_message
+    })
 
-@cached(_unique_certs_ttl_cache)
-async def _unique_certs_with_cache(request):
+
+@cached(TTLCache(maxsize=1, ttl=300))
+async def _unique_certs_with_cache():
     """
     Fetches unique certificate data from the manager API with caching.
     Returns a rendered template with the data or error message.
@@ -256,11 +260,7 @@ async def _unique_certs_with_cache(request):
     except Exception as e:
         error_message = str(e)
         logger.error(f"_unique_certs_with_cache error: {e}")
-    return templates.TemplateResponse("unique_certs.html", {
-        "request": request,
-        "unique_certs_data": unique_certs_data,
-        "error_message": error_message
-    })
+    return unique_certs_data, error_message
 
 
 @app.get("/fetched-certs/{worker_name}", response_class=HTMLResponse)
@@ -274,7 +274,7 @@ async def fetched_certs_page(request: Request, worker_name: str):
     })
 
 
-@cached(_fetched_certs_ttl_cache)
+@cached(TTLCache(maxsize=128, ttl=300))
 async def _fetched_certs_by_worker_name(worker_name):
     """
     Fetches fetched certificate data for a given worker from the manager API with caching.
@@ -307,7 +307,7 @@ async def worker_stats_page(request: Request, worker_name: str):
     })
 
 
-@cached(_worker_stats_ttl_cache)
+@cached(TTLCache(maxsize=128, ttl=300))
 async def get_worker_stats(worker_name):
     stats_data = None
     error_message = None
