@@ -61,22 +61,8 @@ async def dashboard(request: Request):
         return templates.TemplateResponse("dashboard.html", cached_context)
 
 
-    log_progress_list = []
-    workers = []
-    round_trip_time = []
-    summary = {"total": 0, "workers": 0}
-    worker_ranking = None
-    logs_summary = None
-
     # Get data from APIs
-    log_progress_list, logs_summary, worker_ranking, workers = await get_dashboard_apis(
-        log_progress_list,
-        logs_summary,
-        round_trip_time,
-        summary,
-        worker_ranking,
-        workers
-    )
+    log_progress_list, logs_summary, worker_ranking, workers, round_trip_time, summary = await get_dashboard_apis()
 
     # Convert last_ping to datetime (used in template)
     await _dashboard_convert_ping_to_datetime(workers)
@@ -166,7 +152,13 @@ async def _dashboard_convert_ping_to_datetime(workers):
 
 
 @cached(TTLCache(maxsize=1, ttl=120))
-async def get_dashboard_apis(log_progress_list, logs_summary, round_trip_time, summary, worker_ranking, workers):
+async def get_dashboard_apis():
+    round_trip_time = []
+    summary = {"total": 0, "workers": 0}
+    log_progress_list = []
+    workers = []
+    worker_ranking = None
+    logs_summary = None
     async with httpx.AsyncClient(timeout=15.0) as client:
         log_progress_list = await _dashboard_logs_progress(client, log_progress_list, round_trip_time, summary)
 
@@ -178,7 +170,7 @@ async def get_dashboard_apis(log_progress_list, logs_summary, round_trip_time, s
 
         # logs_summary
         logs_summary = await _dashboard_logs_summary(client, logs_summary, round_trip_time, summary)
-    return log_progress_list, logs_summary, worker_ranking, workers
+    return log_progress_list, logs_summary, worker_ranking, workers, round_trip_time, summary
 
 
 async def _dashboard_logs_summary(client, logs_summary, round_trip_time, summary):
