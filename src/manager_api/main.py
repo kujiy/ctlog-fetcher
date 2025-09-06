@@ -57,43 +57,17 @@ app.add_middleware(LatencySamplingMiddleware)
 
 
 
-def is_growing_log(log_name, category):
-    """
-    Returns True if the log is still growing (new certs are being added), otherwise False.
-    """
-    # cloudflare: nimbus2026
-    if category == "cloudflare" and log_name == "nimbus2026":
-        return True
-    # letsencrypt: 2026h2
-    if category == "letsencrypt" and log_name == "2026h2":
-        return True
-    # digicert: sphinx2026h2, wyvern2026h2
-    if category == "digicert" and log_name in ["sphinx2026h2", "wyvern2026h2"]:
-        return True
-    # trustasia: log2026a, log2026b
-    if category == "trustasia" and log_name in ["log2026b"]:
-        return True
-    if category == "google" and log_name in ["xenon2026h2", "argon2026h2"]:
-        return True
-    return False
-
 @cached(TTLCache(maxsize=100, ttl=STH_FETCH_INTERVAL_SEC))
 async def get_almost_completed_log_names(db, category):
     # Get all log_names and their fetch_rate for the category
     stmt = select(LogFetchProgress.log_name, LogFetchProgress.fetch_rate).where(
-        LogFetchProgress.category == category
+        LogFetchProgress.category == category,
+        LogFetchProgress.fetch_rate == 1
     )
     rows = (await db.execute(stmt)).all()
     result = []
     for log_name, fetch_rate in rows:
-        if is_growing_log(log_name, category):
-            # For growing logs, exclude if fetch_rate > 0.99
-            if fetch_rate > 0.99:
-                result.append(log_name)
-        else:
-            # For fixed-size logs, exclude only if fetch_rate == 1
-            if fetch_rate == 1:
-                result.append(log_name)
+        result.append(log_name)
     return result
 
 
