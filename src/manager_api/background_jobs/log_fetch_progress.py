@@ -27,7 +27,7 @@ async def aggregate_log_fetch_progress():
                         max_end = sth_end - 1
 
                         # Find min_completed_end using BATCH_SIZE logic, start from last known
-                        min_completed_end = last_completed_map.get((category, log_name), None)
+                        min_completed_end = await get_min_completed_end(category, last_completed_map, log_name, session)
                         if max_end is not None:
                             if min_completed_end is not None:
                                 i = min_completed_end + BATCH_SIZE
@@ -60,6 +60,17 @@ async def aggregate_log_fetch_progress():
     except asyncio.CancelledError:
         # Graceful shutdown
         return
+
+
+async def get_min_completed_end(category, last_completed_map, log_name, session):
+    min_completed_end = last_completed_map.get((category, log_name), None)
+    if min_completed_end is None:
+        # Try to get from DB
+        min_completed_end = await get_log_fetch_progress_min_completed_end(category, log_name, session)
+    if min_completed_end is None:
+        # Fallback to BATCH_SIZE - 1
+        min_completed_end = BATCH_SIZE - 1
+    return min_completed_end
 
 
 async def sth_by_log_name(log_name, session):
@@ -137,6 +148,15 @@ async def get_all_completed_worker_ends(log_name, session):
     )
     result = await session.execute(stmt)
     return [row[0] for row in result.fetchall()]
+
+# Helper: fetch min_completed_end from LogFetchProgress for cold start
+async def get_log_fetch_progress_min_completed_end(category, log_name, session):
+    stmt = select(LogFetchProgress.min_completed_end).where(
+        LogFetchProgress.category == category,
+        LogFetchProgress.log_name == log_name
+    ).order_by(LogFetchProgress.updated_at.desc())
+    row = (await session.execute(stmt)).first()
+    return row[0] if row and row[0] is not None else None
 
 
 def start_log_fetch_progress():
