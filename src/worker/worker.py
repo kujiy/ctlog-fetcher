@@ -85,6 +85,7 @@ def fetch_ct_log(ct_log_url, start, end, proxies=None):
             raise NeedTreeSizeException(resp.text)
         else:
             logger.debug(f"Failed to fetch CT log: {resp.status_code} url={url}")
+            sleep_with_stop_check(5, my_stop_event)
             return []
     except Exception as e:
         logger.debug(f"fetch_ct_log exception: [{type(e).__name__}] {e} url={url}")
