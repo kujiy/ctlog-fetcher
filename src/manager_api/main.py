@@ -259,7 +259,7 @@ async def get_end_listby_lob_name_with_running_or_completed(db, log_name, min_en
     # Get distinct end values for this log (sorted ascending), optionally only those > min_end
     q = [
         WorkerStatus.log_name == log_name,
-        WorkerStatus.status.in_([JobStatus.RUNNING.value, JobStatus.COMPLETED.value])
+        WorkerStatus.status.in_([JobStatus.RUNNING.value, JobStatus.COMPLETED.value, JobStatus.SKIPPED.value])
     ]
     if min_end is not None:
         q.append(WorkerStatus.end > min_end)
@@ -617,9 +617,9 @@ async def update_worker_status_and_summary(data: WorkerPingModel | WorkerPingBas
         )
         ws = (await db.execute(ws_stmt)).scalars().first()
         if ws:
-            # Guard: If already COMPLETED, do not overwrite with later PINGs
-            if ws.status == JobStatus.COMPLETED.value:
-                return {"message": "already completed, no update"}
+            # Guard: If already COMPLETED or SKIPPED, do not overwrite with later PINGs
+            if ws.status in [JobStatus.COMPLETED.value, JobStatus.SKIPPED.value]:
+                return {"message": "already completed/skipped, no update"}
             ws.worker_name = data.worker_name
             ws.current = data.current
             ws.status = status_value

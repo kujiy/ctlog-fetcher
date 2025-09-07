@@ -135,7 +135,7 @@ async def get_completed_worker_status(i, log_name, session):
     stmt = select(WorkerStatus).where(
         WorkerStatus.log_name == log_name,
         WorkerStatus.end == i,
-        WorkerStatus.status == JobStatus.COMPLETED.value
+        WorkerStatus.status.in_([JobStatus.COMPLETED.value, JobStatus.SKIPPED.value])
     )
     completed = (await session.execute(stmt)).scalars().first()
     return completed
@@ -144,7 +144,7 @@ async def get_completed_worker_status(i, log_name, session):
 async def get_all_completed_worker_ends(log_name, session):
     stmt = select(WorkerStatus.end).where(
         WorkerStatus.log_name == log_name,
-        WorkerStatus.status == JobStatus.COMPLETED.value
+        WorkerStatus.status.in_([JobStatus.COMPLETED.value, JobStatus.SKIPPED.value])
     )
     result = await session.execute(stmt)
     return [row[0] for row in result.fetchall()]
