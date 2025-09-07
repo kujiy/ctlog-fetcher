@@ -886,7 +886,7 @@ async def get_worker_stats(worker_name: str, db=Depends(get_async_session)):
                 bucket["log_name_counts"][ln] = bucket["log_name_counts"].get(ln, 0) + 1
                 break
 
-    job_status_order = [JobStatus.RUNNING.value, JobStatus.COMPLETED.value, JobStatus.RESUME_WAIT.value, JobStatus.DEAD.value]
+    job_status_order = [JobStatus.RUNNING.value, JobStatus.COMPLETED.value, JobStatus.RESUME_WAIT.value, JobStatus.SKIPPED.value, JobStatus.DEAD.value]
 
     # order by most recent hour first
     buckets_sorted = list(reversed(buckets))

@@ -199,7 +199,7 @@ class LogFetchProgress(Base):
     min_completed_end = Column(BigInteger, nullable=True)
     sth_end = Column(BigInteger, nullable=True)
     fetch_rate = Column(Float, nullable=True)  # 取得率
-    status = Column(String(32), nullable=False)  # "completed" or "in_progress"
+    status = Column(String(32), nullable=False)  # enum: LogFetchProgressStatus
     updated_at = Column(DateTime, nullable=False)
 
     __table_args__ = (
