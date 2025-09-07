@@ -606,7 +606,6 @@ async def get_worker_ranking(db=Depends(get_async_session)):
 
 
 
-
 async def update_worker_status_and_summary(data: WorkerPingModel | WorkerPingBaseModel, db, status_value):
     lock_key = (data.worker_name, data.log_name, data.start, data.end)
     async with locks[lock_key]:
@@ -664,6 +663,11 @@ async def worker_ping(data: WorkerPingModel, db=Depends(get_async_session)):
 @app.post("/api/worker/completed")
 async def worker_completed(data: WorkerPingBaseModel, db=Depends(get_async_session)):
     return await update_worker_status_and_summary(data, db, JobStatus.COMPLETED.value)
+
+# failed: when a job is failed due to: CT Log API has corrupted data, network error, etc.
+@app.post("/api/worker/failed")
+async def worker_failed(data: WorkerPingBaseModel, db=Depends(get_async_session)):
+    return await update_worker_status_and_summary(data, db, JobStatus.FAILED.value)
 
 # resume_request: only when abnormal termination
 @app.post("/api/worker/resume_request")

@@ -1,6 +1,5 @@
 import asyncio
-from datetime import datetime, time, timedelta, timezone
-
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 
 from src.config import WORKER_LIVENESS_TTL, WORKER_DEAD_THRESHOLD_MINS
@@ -55,16 +54,16 @@ async def should_skip(session, w) -> bool:
         (models.WorkerStatus.log_name == w.log_name) &
         (models.WorkerStatus.start == w.start) &
         (models.WorkerStatus.end == w.end) &
-        (models.WorkerStatus.status == JobStatus.DEAD.value)
+        (models.WorkerStatus.status.in_([JobStatus.DEAD.value, JobStatus.FAILED.value]))
     )
     count_result = await session.execute(count_stmt)
     dead_count = count_result.scalar()
     return dead_count > 3
 
 
-def start_worker_liveness_monitor():
+async def start_worker_liveness_monitor():
     # if an API has been dead, wait for a while until all workers send their last_ping. Otherwise, they may be marked as dead immediately.
-    time.sleep(WORKER_LIVENESS_TTL * 10)
+    await asyncio.sleep(WORKER_LIVENESS_TTL * 5)
     return asyncio.create_task(worker_liveness_monitor())
 
 if __name__ == '__main__':

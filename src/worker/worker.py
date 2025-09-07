@@ -137,7 +137,8 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
             omikuji = random.choice(omikuji_list)
             with failed_lock:
                 retry_count = len(failed_uploads)
-            update_console_message(status_lines, category, log_name, req_count, current, worker_jp_count, worker_total_count, end, task, start_time, omikuji, retry_count)
+            update_console_message(status_lines, category, log_name, req_count, current, worker_jp_count,
+                                   worker_total_count, end, task, start_time, omikuji, retry_count)
 
             # Check stop_event before API call
             if my_stop_event.is_set():
@@ -156,11 +157,16 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
             actual_entry_size = len(entries)
             logger.debug(f"[DEBUG] Fetched entries: {actual_entry_size} (current={current})")
 
-            if empty_entries_count > 10:
+            if empty_entries_count > 10:  # 1 + 2 + 4 + 8 + 16 + 32 + 60 + 60 + 60 + 60 = 303 seconds max wait(5 min)
                 logger.debug(f"[WARN] Entries were empty 10 times in a row: category={category} log_name={log_name} current={current}")
+                send_failed(args, log_name, ct_log_url, task, end, current,
+                            last_uploaded_index, worker_jp_count, worker_total_count, my_ip)
                 break
             if not entries:
                 empty_entries_count += 1
+                # exponential backoff with max 60 seconds
+                sleep_time = min(2 ** empty_entries_count, 60)
+                time.sleep(sleep_time)
                 continue
             else:
                 empty_entries_count = 0
@@ -286,7 +292,7 @@ def send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded
         "current": current,
         "worker_total_count": worker_total_count,
         "last_uploaded_index": last_uploaded_index,
-        "status": JobStatus.COMPLETED.value,  # Add the missing required status field
+        "status": JobStatus.COMPLETED.value,
         "jp_count": worker_jp_count,
         "jp_ratio": (worker_jp_count / worker_total_count) if worker_total_count > 0 else 0,
         "ip_address": my_ip
@@ -309,6 +315,36 @@ def send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded
             "method": "POST",
             "data": completed_data
         }, prefix="pending_completed")
+
+
+def send_failed(args, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, my_ip):
+    data = {
+        "worker_name": args.worker_name,
+        "log_name": log_name,
+        "ct_log_url": ct_log_url,
+        "start": task.get('start'),
+        "end": end,
+        "current": current,
+        "worker_total_count": worker_total_count,
+        "last_uploaded_index": last_uploaded_index,
+        "status": JobStatus.FAILED.value,
+        "jp_count": worker_jp_count,
+        "jp_ratio": (worker_jp_count / worker_total_count) if worker_total_count > 0 else 0,
+        "ip_address": my_ip
+    }
+    url = f"{args.manager}/api/worker/failed"
+    try:
+        resp = requests.post(url, json=data, timeout=80)
+        if resp.status_code != 200:
+            # Log detailed API response for debugging
+            logger.debug(f"[worker] failed to send failed api: status={resp.status_code}")
+            logger.debug(f"[worker] failed api response body: {resp.text}")
+            logger.debug(f"[worker] failed api request data: {json.dumps(data, indent=2)}")
+            # ignore the request error
+        else:
+            logger.debug(f"[worker] failed api - successfully sent: {log_name} range={task.get('start')}-{end}")
+    except Exception as e:
+        logger.debug(f"[worker] failed to send failed api: {e}")
 
 
 
