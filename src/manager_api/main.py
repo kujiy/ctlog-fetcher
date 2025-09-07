@@ -477,9 +477,45 @@ async def get_logs_summary(db=Depends(get_async_session)):
 async def get_logs_progress(db=Depends(get_async_session)):
     # Fetch all LogFetchProgress records
     progress_rows = (await db.execute(select(LogFetchProgress).order_by(LogFetchProgress.category, LogFetchProgress.log_name))).scalars().all()
+    log_names = [p.log_name for p in progress_rows]
+
+    # Fetch latest snapshot for all log_names from LogFetchProgressHistory
+    from sqlalchemy import desc
+    latest_snapshots = {}
+    if log_names:
+        # Get latest snapshot_timestamp for each log_name
+        subq = (
+            select(
+                LogFetchProgressHistory.log_name,
+                func.max(LogFetchProgressHistory.snapshot_timestamp).label("max_ts")
+            )
+            .where(LogFetchProgressHistory.log_name.in_(log_names))
+            .group_by(LogFetchProgressHistory.log_name)
+            .subquery()
+        )
+        # Join to get full row for each latest snapshot
+        stmt = (
+            select(LogFetchProgressHistory)
+            .join(subq, (LogFetchProgressHistory.log_name == subq.c.log_name) &
+                        (LogFetchProgressHistory.snapshot_timestamp == subq.c.max_ts))
+        )
+        history_rows = (await db.execute(stmt)).scalars().all()
+        for h in history_rows:
+            latest_snapshots[h.log_name] = h
+
     logs = []
     for p in progress_rows:
         log_dict = {k: v for k, v in p.__dict__.items() if not k.startswith('_')}
+        # diff calculation with latest snapshot
+        diff = {}
+        h = latest_snapshots.get(p.log_name)
+        if h:
+            diff["sth_end"] = (p.sth_end or 0) - (h.sth_end or 0)
+            diff["min_completed_end"] = (p.min_completed_end or 0) - (h.min_completed_end or 0)
+        else:
+            diff["sth_end"] = None
+            diff["min_completed_end"] = None
+        log_dict["diff"] = diff
         logs.append(log_dict)
     return logs
 

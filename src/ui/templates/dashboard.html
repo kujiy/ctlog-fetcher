@@ -196,8 +196,22 @@
         {{ log.log_name }}
     </a>
 </th>
-                <td>{{ "{:,}".format(log.sth_end) if log.sth_end is not none else '-' }}</td>
-                <td>{{ "{:,}".format(log.min_completed_end) if log.min_completed_end is not none else '-' }}</td>
+                <td>
+                    {{ "{:,}".format(log.sth_end) if log.sth_end is not none else '-' }}
+                    {% if log.diff is mapping and 'sth_end' in log.diff and log.diff.sth_end is not none and log.diff.sth_end != 0 %}
+                        <span class="diff" style="color: {% if log.diff.sth_end > 0 %}green{% elif log.diff.sth_end < 0 %}red{% endif %};">
+                            ({% if log.diff.sth_end > 0 %}+{% endif %}{{ log.diff.sth_end | string }})
+                        </span>
+                    {% endif %}
+                </td>
+                <td>
+                    {{ "{:,}".format(log.min_completed_end) if log.min_completed_end is not none else '-' }}
+                    {% if log.diff is mapping and 'min_completed_end' in log.diff and log.diff.min_completed_end is not none and log.diff.min_completed_end != 0 %}
+                        <span class="diff" style="color: {% if log.diff.min_completed_end > 0 %}green{% elif log.diff.min_completed_end < 0 %}red{% endif %};">
+                            ({% if log.diff.min_completed_end > 0 %}+{% endif %}{{ log.diff.min_completed_end | string }})
+                        </span>
+                    {% endif %}
+                </td>
                 <td>
                     {% if log.sth_end is not none and log.min_completed_end is not none %}
                         {% set remaining = log.sth_end - log.min_completed_end %}
