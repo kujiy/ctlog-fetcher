@@ -490,10 +490,13 @@ async def get_workers_status(db=Depends(get_async_session)):
     # Fetch up to 100 records with status=running
     stmt_running = select(WorkerStatus).where(WorkerStatus.status == JobStatus.RUNNING.value).order_by(WorkerStatus.last_ping.desc()).limit(100)
     running_workers = (await db.execute(stmt_running)).scalars().all()
-
+    total_running_count = None
     # If fewer than 100 running workers, fetch additional records with other statuses
     if len(running_workers) == 100:
         last_100 = running_workers
+        # actual count of running workers
+        stmt_count = select(func.count()).where(WorkerStatus.status == JobStatus.RUNNING.value)
+        total_running_count = (await db.execute(stmt_count)).scalar_one()
     else:
         remaining_limit = 100 - len(running_workers)
         stmt_other = select(WorkerStatus).where(WorkerStatus.status != JobStatus.RUNNING.value).order_by(WorkerStatus.last_ping.desc()).limit(remaining_limit)
@@ -519,7 +522,7 @@ async def get_workers_status(db=Depends(get_async_session)):
         })
     return {
         "summary": {
-            "workers": len(workers),
+            "workers": total_running_count or len(workers),
             "recent_worker_names": len(set(w['worker_name'] for w in workers)),
             "last_updated": last_100[0].last_ping.isoformat() if last_100 and last_100[0].last_ping else "-",
         },
