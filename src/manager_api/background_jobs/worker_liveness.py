@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 
 from src.config import WORKER_LIVENESS_TTL, WORKER_DEAD_THRESHOLD_MINS
 from src.share.job_status import JobStatus
@@ -45,6 +45,7 @@ async def worker_liveness_monitor():
         return
 
 def start_worker_liveness_monitor():
+    time.sleep(WORKER_LIVENESS_TTL * 10)  # if an API has been dead, wait for a while until all workers send their last_ping. Otherwise, they may be marked as dead immediately.
     return asyncio.create_task(worker_liveness_monitor())
 
 if __name__ == '__main__':

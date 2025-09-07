@@ -617,6 +617,9 @@ async def update_worker_status_and_summary(data: WorkerPingModel | WorkerPingBas
         )
         ws = (await db.execute(ws_stmt)).scalars().first()
         if ws:
+            # Guard: If already COMPLETED, do not overwrite with later PINGs
+            if ws.status == JobStatus.COMPLETED.value:
+                return {"message": "already completed, no update"}
             ws.worker_name = data.worker_name
             ws.current = data.current
             ws.status = status_value
