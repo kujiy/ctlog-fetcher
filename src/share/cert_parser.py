@@ -475,14 +475,6 @@ class JPCertificateParser:
                 format=serialization.PublicFormat.SubjectPublicKeyInfo
             )
             data['subject_public_key_hash'] = hashlib.sha256(public_key_bytes).hexdigest()
-
-            # Calculate issuance lag (CT timestamp vs not_before)
-            # This would need the actual CT timestamp converted properly
-            # For now, set to None as we need more precise timing data
-
-            # Other fields would be calculated during analysis phase
-            # when comparing with previous certificates
-
         except Exception as e:
             logger.debug(f"[_extract_technical_info] Error extracting technical info: {e}")
             raise
