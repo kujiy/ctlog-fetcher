@@ -11,7 +11,6 @@ from typing import List
 
 from starlette.requests import ClientDisconnect
 
-from .background_jobs.log_fetch_snapshot_job import background_log_fetch_snapshot_job
 from .metrics import LatencySamplingMiddleware
 from .models import CTLogSTH, WorkerLogStat, WorkerStatus, Cert, LogFetchProgress, LogFetchProgressHistory
 from src.share.cert_parser import JPCertificateParser
@@ -38,6 +37,7 @@ from .background_jobs.sth_fetcher import start_sth_fetcher
 from .background_jobs.worker_liveness import start_worker_liveness_monitor
 from .background_jobs.log_fetch_progress import start_log_fetch_progress
 from .background_jobs.unique_cert_counter import start_unique_cert_counter, get_unique_cert_counter_count
+from .background_jobs.log_fetch_snapshot_job import start_log_fetch_snapshot_job
 
 
 # JST timezone
@@ -140,7 +140,7 @@ async def on_startup():
             app.state.background_tasks.append(start_worker_liveness_monitor())
             app.state.background_tasks.append(start_unique_cert_counter())
             app.state.background_tasks.append(start_log_fetch_progress())
-            app.state.background_tasks.append(background_log_fetch_snapshot_job())
+            app.state.background_tasks.append(start_log_fetch_snapshot_job())
             logger.info("Background jobs started and tasks stored in app.state.background_tasks")
             app.state.background_jobs_lock_file = lock_file
         except (IOError, OSError) as e:

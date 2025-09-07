@@ -24,12 +24,12 @@ async def worker_liveness_monitor():
                 )
                 workers = result.scalars().all()
                 for w in workers:
-                    if await need_update(threshold, w):
+                    if await has_no_ping(threshold, w):
+                        w.status = JobStatus.DEAD.value
+                    else:
                         if await should_skip(session, w):
                             # Update the status to SKIPPED
                             w.status = JobStatus.SKIPPED.value
-                        else:
-                            w.status = JobStatus.DEAD.value
                 await session.commit()
             await asyncio.sleep(WORKER_LIVENESS_TTL)
     except asyncio.CancelledError:
@@ -37,7 +37,7 @@ async def worker_liveness_monitor():
         return
 
 
-async def need_update(threshold, w) -> bool:
+async def has_no_ping(threshold, w) -> bool:
     offset_aware_last_ping = w.last_ping
     if w.last_ping and w.last_ping.tzinfo is None:
         offset_aware_last_ping = w.last_ping.replace(tzinfo=JST)
