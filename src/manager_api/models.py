@@ -211,6 +211,26 @@ class LogFetchProgressStatus(Enum):
     COMPLETED = "completed"
     IN_PROGRESS = "in_progress"
 
+
+
+class LogFetchProgressHistory(Base):
+    __tablename__ = 'log_fetch_progress_history'
+    id = Column(Integer, primary_key=True)
+    snapshot_timestamp = Column(DateTime, nullable=False)
+    category = Column(String(64), index=True, nullable=False)
+    log_name = Column(String(64), index=True, nullable=False)
+    min_completed_end = Column(BigInteger, nullable=True)
+    sth_end = Column(BigInteger, nullable=True)
+    fetch_rate = Column(Float, nullable=True)
+    status = Column(String(32), nullable=False)
+    updated_at = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        Index('idx_log_fetch_progress_history_log_name', 'log_name'),
+        Index('idx_log_fetch_progress_history_snapshot', 'snapshot_timestamp'),
+    )
+
+
 class UniqueCertCounter(Base):
     __tablename__ = 'unique_cert_counter'
     id = Column(Integer, primary_key=True)
@@ -220,6 +240,8 @@ class UniqueCertCounter(Base):
     __table_args__ = (
         Index('idx_unique_cert_counter_unique', 'issuer', 'serial_number', 'certificate_fingerprint_sha256', unique=True),
     )
+
+
 
 # Example DB connection
 #engine = create_engine('mysql+pymysql://root@127.0.0.1:3306/ct')

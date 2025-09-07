@@ -12,7 +12,7 @@ from typing import List
 from starlette.requests import ClientDisconnect
 
 from .metrics import LatencySamplingMiddleware
-from .models import CTLogSTH, WorkerLogStat, WorkerStatus, Cert, LogFetchProgress
+from .models import CTLogSTH, WorkerLogStat, WorkerStatus, Cert, LogFetchProgress, LogFetchProgressHistory
 from src.share.cert_parser import JPCertificateParser
 from sqlalchemy import func, and_, select, cast, Float
 
@@ -785,9 +785,6 @@ def clear_cache():
 
 
 # --- get_tree_size with 1-minute cache ---
-
-from datetime import timedelta
-
 @app.get("/api/worker_stats/{worker_name}")
 async def get_worker_stats(worker_name: str, db=Depends(get_async_session)):
     # 1. WorkerLogStat: sorted by jp_count_sum desc
@@ -875,6 +872,28 @@ async def get_worker_stats(worker_name: str, db=Depends(get_async_session)):
         "log_stats": log_stats,
         "status_stats": status_stats,
     }
+
+
+@app.get("/api/log_fetch_progress_history/{log_name}")
+async def get_log_fetch_progress_history(log_name: str, db=Depends(get_async_session)):
+    two_weeks_ago = datetime.now(JST) - timedelta(weeks=2)
+    stmt = select(LogFetchProgressHistory).where(
+        LogFetchProgressHistory.log_name == log_name,
+        LogFetchProgressHistory.snapshot_timestamp >= two_weeks_ago
+    ).order_by(LogFetchProgressHistory.snapshot_timestamp)
+    history = (await db.execute(stmt)).scalars().all()
+
+    def to_dict(entry):
+        d = {k: v for k, v in entry.__dict__.items() if not k.startswith('_')}
+        # datetime型はisoformatで返す
+        for k, v in d.items():
+            if isinstance(v, datetime):
+                d[k] = v.isoformat()
+        return d
+
+    response = [to_dict(entry) for entry in history]
+    return {"log_name": log_name, "history": response}
+
 
 
 _tree_size_cache = TTLCache(maxsize=100, ttl=300)

@@ -191,7 +191,11 @@
             {%  set completed = percent > 99 %}
             <tr class="{% if completed %}highlight-green{% endif %}">
                 <th class="{% if completed %}highlight-green{% endif %}">{{ log.category }}</th>
-                <th class="{% if completed %}highlight-green{% endif %}">{{ log.log_name }}</th>
+                <th class="{% if completed %}highlight-green{% endif %}">
+    <a href="/log-history/{{ log.log_name }}" style="text-decoration: none; color: #3498db;">
+        {{ log.log_name }}
+    </a>
+</th>
                 <td>{{ "{:,}".format(log.sth_end) if log.sth_end is not none else '-' }}</td>
                 <td>{{ "{:,}".format(log.min_completed_end) if log.min_completed_end is not none else '-' }}</td>
                 <td>

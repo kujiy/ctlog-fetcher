@@ -16,8 +16,7 @@ from datetime import datetime, timedelta, timezone
 import traceback
 from src.ui.background_jobs.snapshot_job import background_snapshot_job, load_snapshot
 from src.config import CT_LOG_ENDPOINTS, MANAGER_API_URL_FOR_UI, METRICS_URL
-
-
+from src.ui.metrics_utils import parse_metrics_text
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 logger = app.logger = getLogger("uvicorn")
@@ -329,7 +328,50 @@ async def get_worker_stats(worker_name):
         error_message = str(e)
     return stats_data, error_message
 
-from src.ui.metrics_utils import parse_metrics_text
+
+
+@app.get("/log-history/{log_name}", response_class=HTMLResponse)
+async def log_history_page(request: Request, log_name: str):
+    try:
+        # Fetch log history data from the manager API
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/log_fetch_progress_history/{log_name}")
+            if response.status_code == 200:
+                data = response.json()
+            else:
+                data = {"error": f"API returned status code {response.status_code}"}
+    except Exception as e:
+        data = {"error": str(e)}
+
+    # Prepare data for graph
+    history = data.get("history", [])
+    graph_data = {
+        "timestamps": [entry.get("snapshot_timestamp") for entry in history],
+        "min_completed_end": [entry.get("min_completed_end") for entry in history],
+        "sth_end": [entry.get("sth_end") for entry in history],
+        "fetch_rate": [entry.get("fetch_rate") for entry in history],
+        "min_completed_end_diff": [
+            entry.get("min_completed_end", 0) - history[i - 1].get("min_completed_end", 0)
+            if i > 0 else 0 for i, entry in enumerate(history)
+        ],
+        "sth_end_diff": [
+            entry.get("sth_end", 0) - history[i - 1].get("sth_end", 0)
+            if i > 0 else 0 for i, entry in enumerate(history)
+        ],
+        "fetch_rate_diff": [
+            entry.get("fetch_rate", 0) - history[i - 1].get("fetch_rate", 0)
+            if i > 0 else 0 for i, entry in enumerate(history)
+        ]
+    }
+    # Render the log_history.html template with the fetched data
+    return templates.TemplateResponse("log_history.html", {
+        "request": request,
+        "log_name": log_name,
+        "history": history,
+        "graph_data": graph_data,
+        "error": data.get("error")
+    })
+
 
 @app.get("/metrics", response_class=HTMLResponse)
 async def metrics_page(request: Request):

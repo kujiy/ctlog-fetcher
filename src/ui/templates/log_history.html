@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Log History - {{ log_name }}</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; margin: 2em; }
+        h1, h2 { color: #2c3e50; }
+        canvas { margin-bottom: 2em; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 2em; }
+        th, td { border: 1px solid #ccc; padding: 0.5em; text-align: left; }
+        th { background: #f4f4f4; }
+    </style>
+</head>
+<body>
+    <h1>Log History: {{ log_name }}</h1>
+
+    <h2>1. Progression of min_completed_end, sth_end, and fetch_rate</h2>
+    <canvas id="progressChart"></canvas>
+
+    <h2>2. Differences in min_completed_end, sth_end, and fetch_rate</h2>
+    <canvas id="diffChart"></canvas>
+
+    <script>
+        const graphData = {{ graph_data | tojson | safe }};
+        const labels = graphData.timestamps;
+        const minCompletedEnd = graphData.min_completed_end;
+        const sthEnd = graphData.sth_end;
+        const fetchRate = graphData.fetch_rate;
+        const minCompletedEndDiff = graphData.min_completed_end_diff;
+        const sthEndDiff = graphData.sth_end_diff;
+        const fetchRateDiff = graphData.fetch_rate_diff;
+
+        const ctx1 = document.getElementById('progressChart').getContext('2d');
+        new Chart(ctx1, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'min_completed_end', data: minCompletedEnd, borderColor: 'blue', fill: false },
+                    { label: 'sth_end', data: sthEnd, borderColor: 'green', fill: false },
+                    { label: 'fetch_rate', data: fetchRate, borderColor: 'red', fill: false }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: 'top' } },
+                scales: { x: { title: { display: true, text: 'Timestamp' } }, y: { title: { display: true, text: 'Value' } } }
+            }
+        });
+
+        const ctx2 = document.getElementById('diffChart').getContext('2d');
+        new Chart(ctx2, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'min_completed_end_diff', data: minCompletedEndDiff, borderColor: 'blue', fill: false },
+                    { label: 'sth_end_diff', data: sthEndDiff, borderColor: 'green', fill: false },
+                    { label: 'fetch_rate_diff', data: fetchRateDiff, borderColor: 'red', fill: false }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: 'top' } },
+                scales: { x: { title: { display: true, text: 'Timestamp' } }, y: { title: { display: true, text: 'Difference' } } }
+            }
+        });
+    </script>
+
+    <h2>3. Snapshot Table (Latest First)</h2>
+    {% if history %}
+    <table>
+        <thead>
+            <tr>
+                {% for key in history[0].keys() %}
+                    <th>{{ key }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in history|sort(attribute='snapshot_timestamp', reverse=True) %}
+            <tr>
+                {% for value in entry.values() %}
+                    <td>{{ value }}</td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No history data available.</p>
+    {% endif %}
+</body>
+</html>
