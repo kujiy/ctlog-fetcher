@@ -520,9 +520,11 @@ async def get_workers_status(db=Depends(get_async_session)):
             "start": w.start,
             "end": w.end
         })
+    threads = total_running_count or len([w for w in last_100 if w.status == JobStatus.RUNNING.value])
     return {
         "summary": {
-            "workers": total_running_count or len(workers),
+            "threads": threads,
+            "workers": int(threads / len(ORDERED_CATEGORIES)),
             "recent_worker_names": len(set(w['worker_name'] for w in workers)),
             "last_updated": last_100[0].last_ping.isoformat() if last_100 and last_100[0].last_ping else "-",
         },

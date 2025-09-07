@@ -40,8 +40,8 @@
     <section>
         <!-- Summary Section: Numbers are displayed with commas every three digits -->
         <b>Cumulative Fetched Certs:</b> {{ "{:,}".format(summary.total) }} |
-        <b>Cumulative Worker Names</b> {{ summary.cumulative_worker_names }} |
-        <b>Active Workers:</b> {{ "{:,}".format(summary.workers) }} &nbsp;|
+        <b>Cumulative Worker Names:</b> {{ summary.cumulative_worker_names }} |
+        <b>Active:</b> {{ "{:,}".format(summary.threads) }} threads, {{ "{:,}".format(summary.workers) }} workers&nbsp;|
         <b>Updated: </b> {{ summary.last_updated }}
         <div style="margin-top: 0.5em; margin-bottom: 0.5em; padding: 0.5em; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 4px;">
             <b>😃 お知らせ (2025-09-01 14:03)</b> Docker image を更新してください 😃<br>

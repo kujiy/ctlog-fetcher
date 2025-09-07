@@ -218,7 +218,6 @@ async def _dashboard_workers_status(client, round_trip_time, summary, workers):
             workers_data = workers_resp.json()
             workers = workers_data.get("workers", [])
             summary.update(workers_data.get("summary", {}))
-            summary["workers"] = sum(1 for w in workers if w.get("status") == "running")
     except Exception as e:
         round_trip_time.append({"api_name": "workers_status", "rtt": None, "error": str(e)})
         summary["workers_status_error"] = str(e)
