@@ -610,15 +610,15 @@ async def update_worker_status_and_summary(data: WorkerPingModel | WorkerPingBas
     lock_key = (data.worker_name, data.log_name, data.start, data.end)
     async with locks[lock_key]:
         ws_stmt = select(WorkerStatus).where(
-            WorkerStatus.log_name==data.log_name,
-            WorkerStatus.start==data.start,
-            WorkerStatus.end==data.end
+            WorkerStatus.worker_name == data.worker_name,
+            WorkerStatus.log_name == data.log_name,
+            WorkerStatus.start == data.start,
+            WorkerStatus.end == data.end,
+            # Guard: If already marked as completed etc, do not overwrite with later PINGs
+            WorkerStatus.status == JobStatus.RUNNING.value
         )
         ws = (await db.execute(ws_stmt)).scalars().first()
         if ws:
-            # Guard: If already COMPLETED or SKIPPED, do not overwrite with later PINGs
-            if ws.status in [JobStatus.COMPLETED.value, JobStatus.SKIPPED.value]:
-                return {"message": "already completed/skipped, no update"}
             ws.worker_name = data.worker_name
             ws.current = data.current
             ws.status = status_value
