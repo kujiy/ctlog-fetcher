@@ -16,6 +16,7 @@ async def worker_liveness_monitor():
     """
     try:
         while True:
+            logger.info("  - 2️⃣  - worker_liveness_monitor")
             async for session in get_async_session():
                 now = datetime.now(JST)
                 threshold = now - timedelta(minutes=WORKER_DEAD_THRESHOLD_MINS)
@@ -33,6 +34,7 @@ async def worker_liveness_monitor():
                             # Update the status to SKIPPED
                             w.status = JobStatus.SKIPPED.value
                 await session.commit()
+            logger.info(f"  - 2️⃣  - worker_liveness_monitor:sleep_inside_loop={WORKER_LIVENESS_TTL}s")
             await asyncio.sleep(WORKER_LIVENESS_TTL)
     except asyncio.CancelledError:
         # Graceful shutdown
@@ -64,7 +66,7 @@ async def should_skip(session, w) -> bool:
 
 
 async def worker_liveness_monitor_with_sleep():
-    logger.info("2️⃣  - worker_liveness_monitor_with_sleep...")
+    logger.info(f"2️⃣  - worker_liveness_monitor_with_sleep - initial sleep:{WORKER_LIVENESS_TTL * 5} seconds")
     await asyncio.sleep(WORKER_LIVENESS_TTL * 5)  # interval between fetches
     await worker_liveness_monitor()
 

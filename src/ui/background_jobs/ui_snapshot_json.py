@@ -3,10 +3,9 @@ import json
 import asyncio
 import httpx
 from datetime import datetime, timedelta, timezone
-from logging import getLogger
+from src.share.logger import logger
 from src.config import MANAGER_API_URL_FOR_UI
 
-logger = getLogger("uvicorn")
 JST = timezone(timedelta(hours=9))
 SNAPSHOT_PATH = os.path.join(os.path.dirname(__file__), "../snapshot.json")
 
@@ -75,7 +74,8 @@ async def background_snapshot_json():
             if now >= next_930:
                 next_930 += timedelta(days=1)
             wait_sec = (next_930 - now).total_seconds()
+            logger.info(f"      - 📸 [UI:snapshot_json] sleep: until next 9:30 JST ({wait_sec} seconds)")
             await asyncio.sleep(wait_sec)
         except Exception as e:
-            logger.error(f"Snapshot job error: {e}")
+            logger.error(f"Snapshot job error: {e} sleep: 3600 seconds" + str(e))
             await asyncio.sleep(3600)

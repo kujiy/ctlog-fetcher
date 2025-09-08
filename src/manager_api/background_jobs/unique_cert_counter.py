@@ -16,6 +16,7 @@ SLEEP_SEC = 0.5
 JST = timezone(timedelta(hours=9))
 
 async def fetch_and_update_unique_cert_counter():
+    logger.info("  - 3️⃣  - fetch_and_update_unique_cert_counter")
     # Cold start: get max id from unique_cert_counter
     MAX_CACHE_SIZE = 1_000_000
     cache_set = set()
@@ -68,6 +69,7 @@ async def count_job_wrapper():
     logger.info("3️⃣  - unique_counter count_job_wrapper...")
     while True:
         await fetch_and_update_unique_cert_counter()
+        logger.info(f"    - 3️⃣  - unique_counter count_job_wrapper:sleep 13 minutes")
         await asyncio.sleep(60 * 13)  # 13 minutes
 
 

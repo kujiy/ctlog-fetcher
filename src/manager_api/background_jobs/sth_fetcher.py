@@ -35,6 +35,7 @@ async def fetch_and_store_sth():
     logger.info("1️⃣  -  fetch_and_store_sth")
     try:
         while True:
+            logger.info("  - 1️⃣  -  fetch_and_store_sth:while")
             async for session in get_async_session():
                 now = datetime.utcnow()
                 for category, endpoints in CT_LOG_ENDPOINTS.items():
@@ -66,6 +67,7 @@ async def fetch_and_store_sth():
                                 )
                             )
                         await session.commit()
+            logger.info(f"    - 1️⃣  -  fetch_and_store_sth:sleep {STH_FETCH_INTERVAL_SEC} sec")
             await asyncio.sleep(STH_FETCH_INTERVAL_SEC)  # interval between fetches
     except asyncio.CancelledError:
         # Graceful shutdown

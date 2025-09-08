@@ -17,6 +17,7 @@ async def aggregate_log_fetch_progress():
 
     try:
         while True:
+            logger.info("  - 4️⃣  -  aggregate_log_fetch_progress:while")
             async for session in get_async_session():
                 now = datetime.now(JST)
                 for category, endpoints in CT_LOG_ENDPOINTS.items():
@@ -56,6 +57,7 @@ async def aggregate_log_fetch_progress():
                         await upcert_log_fetch_progress(category, fetch_rate, log_name, min_completed_end, now, session,
                                                         status, max_end)
                         logger.debug(f"Updated {log_name} progress from {ct_log_url} as min_completed_end={min_completed_end}, sth_end={sth_end}, fetch_rate={fetch_rate}, status={status}")
+            logger.info(f"  - 4️⃣  -  aggregate_log_fetch_progress:sleep {LOG_FETCH_PROGRESS_TTL} seconds")
             await asyncio.sleep(LOG_FETCH_PROGRESS_TTL)
     except asyncio.CancelledError:
         # Graceful shutdown
