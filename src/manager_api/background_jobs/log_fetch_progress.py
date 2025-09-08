@@ -159,8 +159,13 @@ async def get_log_fetch_progress_min_completed_end(category, log_name, session):
     return row[0] if row and row[0] is not None else None
 
 
+async def log_fetch_progress_wrapper():
+    logger.info("4️⃣  -  log_fetch_progress_wrapper")
+    await aggregate_log_fetch_progress()
+
 def start_log_fetch_progress():
-    return asyncio.create_task(aggregate_log_fetch_progress())
+    logger.info("4️⃣ start_log_fetch_progress...")
+    return asyncio.create_task(log_fetch_progress_wrapper())
 
 
 if __name__ == '__main__':

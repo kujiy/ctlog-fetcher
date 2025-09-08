@@ -134,17 +134,17 @@ async def on_startup():
         try:
             lock_file = open(lock_file_path, 'w')
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            logger.warning(f"Acquired background jobs lock ({lock_file_path}). Starting background jobs...")
+            logger.warning(f"✅ Acquired background jobs lock ({lock_file_path}). Starting background jobs...")
             app.state.background_tasks = []
-            app.state.background_tasks.append(start_sth_fetcher())
-            app.state.background_tasks.append(start_worker_liveness_monitor())
-            app.state.background_tasks.append(start_unique_cert_counter())
-            app.state.background_tasks.append(start_log_fetch_progress())
-            app.state.background_tasks.append(start_log_fetch_snapshot_job())
-            logger.info("Background jobs started and tasks stored in app.state.background_tasks")
+            app.state.background_tasks.append(start_sth_fetcher())  # 1️⃣
+            app.state.background_tasks.append(start_worker_liveness_monitor())  # 2️⃣
+            app.state.background_tasks.append(start_unique_cert_counter())  # 3️⃣
+            app.state.background_tasks.append(start_log_fetch_progress())  # 4️⃣
+            app.state.background_tasks.append(start_log_fetch_snapshot_job())  # 5️⃣
+            logger.info("✅ Background jobs started and tasks stored in app.state.background_tasks")
             app.state.background_jobs_lock_file = lock_file
         except (IOError, OSError) as e:
-            logger.warning(f"Background jobs already running in another process (lock file: {lock_file_path})")
+            logger.warning(f"▶️ Background jobs already running in another process (lock file: {lock_file_path})")
             try:
                 lock_file.close()
             except:

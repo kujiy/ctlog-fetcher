@@ -4,9 +4,7 @@ from ..models import CTLogSTH
 from ...config import CT_LOG_ENDPOINTS, STH_FETCH_INTERVAL_SEC
 from ..db import get_async_session
 import aiohttp
-import logging
-
-logger = logging.getLogger("sth_fetcher")
+from src.share.logger import logger
 
 async def fetch_sth_no_retry(log_name, ct_log_url, now):
     try:
@@ -34,6 +32,7 @@ async def fetch_sth_no_retry(log_name, ct_log_url, now):
         return None, None
 
 async def fetch_and_store_sth():
+    logger.info("1️⃣  -  fetch_and_store_sth")
     try:
         while True:
             async for session in get_async_session():
@@ -73,6 +72,7 @@ async def fetch_and_store_sth():
         return
 
 def start_sth_fetcher():
+    logger.info("️1️⃣ start_sth_fetcher...")
     return asyncio.create_task(fetch_and_store_sth())
 
 if __name__ == '__main__':

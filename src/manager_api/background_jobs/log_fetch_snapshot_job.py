@@ -56,19 +56,20 @@ async def should_save_snapshot(session):
         return False
 
 async def background_log_fetch_snapshot_job():
+    logger.info("5️⃣ Background log fetch snapshot job started")
     while True:
         async for session in get_async_session():
             try:
                 if await should_save_snapshot(session):
                     await save_log_fetch_progress_snapshot(session)
-                await asyncio.sleep(3600)  # Check every hour
             except Exception as e:
                 logger.error(f"Background job error: {e}")
-                await asyncio.sleep(3600)
+            await asyncio.sleep(3600)
 
-async def start_log_fetch_snapshot_job():
-    return asyncio.create_task(await background_log_fetch_snapshot_job())
+def start_log_fetch_snapshot_job():
+    logger.info("5️⃣ Starting log fetch snapshot job")
+    return asyncio.create_task(background_log_fetch_snapshot_job())
 
 
 if __name__ == "__main__":
-    asyncio.run(start_log_fetch_snapshot_job())
+    asyncio.run(background_log_fetch_snapshot_job())
