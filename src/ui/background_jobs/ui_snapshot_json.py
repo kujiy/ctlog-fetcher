@@ -51,8 +51,17 @@ def should_update_snapshot():
         logger.error(f"Failed to check snapshot.json timestamp: {e}")
         return True
 
-async def background_snapshot_job():
+async def background_snapshot_json_wrapper():
+    logger.info("  - 📸 [UI:snapshot_json] background_snapshot_json_wrapper")
+    await background_snapshot_json()
+
+def start_ui_snapshot_json():
+    logger.info("📸 [UI:snapshot_json] start_ui_snapshot_json")
+    return asyncio.create_task(background_snapshot_json_wrapper())
+
+async def background_snapshot_json():
     while True:
+        logger.info("      - 📸 [UI:snapshot_json] background_snapshot_json")
         try:
             if should_update_snapshot():
                 async with httpx.AsyncClient() as client:

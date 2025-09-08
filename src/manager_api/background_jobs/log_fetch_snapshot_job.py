@@ -56,8 +56,9 @@ async def should_save_snapshot(session):
         return False
 
 async def background_log_fetch_snapshot_job():
-    logger.info("5️⃣ Background log fetch snapshot job started")
+    logger.info("5️⃣ - Background log fetch snapshot job started")
     while True:
+        logger.info("          - ️5️⃣  background_log_fetch_snapshot_job:while")
         async for session in get_async_session():
             try:
                 if await should_save_snapshot(session):

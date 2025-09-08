@@ -14,7 +14,8 @@ import asyncio
 import httpx
 from datetime import datetime, timedelta, timezone
 import traceback
-from src.ui.background_jobs.snapshot_job import background_snapshot_job, load_snapshot
+from src.ui.background_jobs.ui_snapshot_json import load_snapshot, \
+    start_ui_snapshot_json
 from src.config import CT_LOG_ENDPOINTS, MANAGER_API_URL_FOR_UI, METRICS_URL
 from src.ui.metrics_utils import parse_metrics_text
 
@@ -31,7 +32,7 @@ logger.warning(f"MANAGER_API_URL: {MANAGER_API_URL_FOR_UI}")
 
 @app.on_event("startup")
 async def start_snapshot_job():
-    asyncio.create_task(background_snapshot_job())
+    start_ui_snapshot_json()
 
 
 # Static files (CSS, etc.)
