@@ -33,7 +33,7 @@ async def save_log_fetch_progress_snapshot(session):
             session.add(history_entry)
 
         await session.commit()
-        logger.info(f"Snapshot saved at {snapshot_timestamp}")
+        logger.info(f"         - ️5️⃣ Snapshot saved at {snapshot_timestamp}")
     except Exception as e:
         logger.error(f"Error saving snapshot: {e}")
         session.rollback()
@@ -50,7 +50,8 @@ async def should_save_snapshot(session):
 
         # Check if 6 hours have passed since the last snapshot
         now = datetime.now(JST)
-        return (now - last_snapshot[0].replace(tzinfo=JST)).total_seconds() >= 6 * 3600
+        snapshot_time = last_snapshot[0].astimezone(JST)  # JST to JST
+        return (now - snapshot_time).total_seconds() >= 6 * 3600
     except Exception as e:
         logger.error(f"Error checking snapshot condition: {e}")
         return False
@@ -58,14 +59,14 @@ async def should_save_snapshot(session):
 async def background_log_fetch_snapshot_job():
     logger.info("5️⃣ - Background log fetch snapshot job started")
     while True:
-        logger.info("          - ️5️⃣  background_log_fetch_snapshot_job:while")
+        logger.info("    - ️5️⃣  background_log_fetch_snapshot_job:while")
         async for session in get_async_session():
             try:
                 if await should_save_snapshot(session):
                     await save_log_fetch_progress_snapshot(session)
             except Exception as e:
                 logger.error(f"Background job error: {e}")
-            logger.info(f"          - ️5️⃣  background_log_fetch_snapshot_job:sleep=3600")
+            logger.info(f"    - ️5️⃣  background_log_fetch_snapshot_job:sleep=3600")
             await asyncio.sleep(3600)
 
 def start_log_fetch_snapshot_job():
