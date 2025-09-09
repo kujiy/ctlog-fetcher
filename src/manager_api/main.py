@@ -14,7 +14,7 @@ from starlette.requests import ClientDisconnect
 from .metrics import LatencySamplingMiddleware
 from .models import CTLogSTH, WorkerLogStat, WorkerStatus, Cert, LogFetchProgress, LogFetchProgressHistory
 from src.share.cert_parser import JPCertificateParser
-from sqlalchemy import func, and_, select, cast, Float
+from sqlalchemy import func, and_, select
 
 from sqlalchemy.exc import IntegrityError, DataError
 from .db import get_async_session, init_engine

@@ -4,7 +4,7 @@ from datetime import datetime, timezone, timedelta
 
 from src.manager_api.db import get_async_session
 from src.manager_api.models import Cert, UniqueCertCounter
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from src.share.logger import logger
 from asyncache import cached
@@ -81,14 +81,14 @@ def start_unique_cert_counter():
 _cache = TTLCache(maxsize=100, ttl=600)
 @cached(_cache)
 async def get_unique_cert_counter_count():
-    from sqlalchemy import func
     async for session in get_async_session():
         result = await session.execute(
-            select(func.count()).select_from(UniqueCertCounter)
+            #TODO: use the accurate count(show tables status is faster but may be inaccurate)
+            text("SHOW TABLE STATUS LIKE 'unique_cert_counter'")
         )
-        count = result.scalar_one()
+        row = result.fetchone()
         await session.close()
-        return count
+        return row._mapping['Rows'] if row else None
 
 if __name__ == "__main__":
     asyncio.run(fetch_and_update_unique_cert_counter())
