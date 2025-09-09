@@ -43,15 +43,27 @@
             data: {
                 labels: labels,
                 datasets: [
-                    { label: 'min_completed_end', data: minCompletedEnd, borderColor: 'blue', fill: false },
-                    { label: 'sth_end', data: sthEnd, borderColor: 'green', fill: false },
-                    { label: 'fetch_rate', data: fetchRate, borderColor: 'red', fill: false }
+                    { label: 'min_completed_end', data: minCompletedEnd, borderColor: 'blue', fill: false, yAxisID: 'y' },
+                    { label: 'sth_end', data: sthEnd, borderColor: 'green', fill: false, yAxisID: 'y' },
+                    { label: 'fetch_rate', data: fetchRate, borderColor: 'red', fill: false, yAxisID: 'y1' }
                 ]
             },
             options: {
                 responsive: true,
                 plugins: { legend: { position: 'top' } },
-                scales: { x: { title: { display: true, text: 'Timestamp' } }, y: { title: { display: true, text: 'Value' } } }
+                scales: {
+                    x: { title: { display: true, text: 'Timestamp' } },
+                    y: { 
+                        title: { display: true, text: 'Value' }
+                    },
+                    y1: {
+                        position: 'right',
+                        title: { display: true, text: 'fetch_rate' },
+                        min: 0,
+                        max: 1,
+                        grid: { drawOnChartArea: false }
+                    }
+                }
             }
         });
 
@@ -61,15 +73,27 @@
             data: {
                 labels: labels,
                 datasets: [
-                    { label: 'min_completed_end_diff', data: minCompletedEndDiff, borderColor: 'blue', fill: false },
-                    { label: 'sth_end_diff', data: sthEndDiff, borderColor: 'green', fill: false },
-                    { label: 'fetch_rate_diff', data: fetchRateDiff, borderColor: 'red', fill: false }
+                    { label: 'min_completed_end_diff', data: minCompletedEndDiff, borderColor: 'blue', fill: false, yAxisID: 'y' },
+                    { label: 'sth_end_diff', data: sthEndDiff, borderColor: 'green', fill: false, yAxisID: 'y' },
+                    { label: 'fetch_rate_diff', data: fetchRateDiff, borderColor: 'red', fill: false, yAxisID: 'y1' }
                 ]
             },
             options: {
                 responsive: true,
                 plugins: { legend: { position: 'top' } },
-                scales: { x: { title: { display: true, text: 'Timestamp' } }, y: { title: { display: true, text: 'Difference' } } }
+                scales: {
+                    x: { title: { display: true, text: 'Timestamp' } },
+                    y: { 
+                        title: { display: true, text: 'Difference' }
+                    },
+                    y1: {
+                        position: 'right',
+                        title: { display: true, text: 'fetch_rate_diff' },
+                        min: 0,
+                        max: 1,
+                        grid: { drawOnChartArea: false }
+                    }
+                }
             }
         });
     </script>
