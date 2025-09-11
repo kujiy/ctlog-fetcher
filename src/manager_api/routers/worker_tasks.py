@@ -58,8 +58,7 @@ async def get_next_task(
         random.shuffle(endpoints)
 
         for log_name, ct_log_url in endpoints:
-            logger.info(f"[next_task] checking log: {log_name}")
-
+            # logger.info(f"[next_task] checking log: {log_name}")
             tree_size = await get_tree_size(ct_log_url, db)
             if tree_size == 0:
                 continue  # Skip logs with tree_size 0
@@ -157,7 +156,7 @@ async def find_next_task(ct_log_url, db, end_set, i, log_name, worker_name):
         if start < 0:
             start = 0
 
-        logger.info(f"[next_task] assigning task: log_name={log_name} start={start} end={end}")
+        # logger.info(f"[next_task] assigning task: log_name={log_name} start={start} end={end}")
 
         ws = await save_worker_status(ct_log_url, db, end, log_name, start, worker_name)
 
