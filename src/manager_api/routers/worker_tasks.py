@@ -34,7 +34,7 @@ async def get_worker_categories():
     remove digicert with 1/5 probability due to the rate limit
     https://groups.google.com/a/chromium.org/g/ct-policy/c/XpmIf5DhfTg
     """
-    if "digicert" in ordered_categories and random.randint(1, 5)
+    if "digicert" in ordered_categories and random.randint(1, 5):
         ordered_categories.remove("digicert")
 
     # e.g. google 3, digicert 1, cloudflare 1, letsencrypt 1, trustasia 1
