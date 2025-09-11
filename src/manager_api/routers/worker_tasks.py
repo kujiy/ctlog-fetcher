@@ -82,13 +82,13 @@ async def get_next_task(
             # logger.info(f"[next_task] end_set for {log_name}: {end_set}")
 
             while i <= max_end:
-                res = await find_next_task(ct_log_url, db, end_set, i, log_name, worker_name)
+                res = await find_next_task(ct_log_url, db, end_set, i, log_name, worker_name, tree_size)
                 if res:
                     return res
                 i += BATCH_SIZE
             # Returns tasks ending in tree_size if the last task (max_end) is not included in the end_set
             if 0 < i - max_end <= BATCH_SIZE and max_end not in end_set:
-                res = await find_next_task(ct_log_url, db, end_set, max_end, log_name, worker_name)
+                res = await find_next_task(ct_log_url, db, end_set, max_end, log_name, worker_name, tree_size)
                 if res:
                     return res
         # If all logs are collected, return sleep instruction to worker
@@ -155,7 +155,7 @@ async def get_end_listby_lob_name_with_running_or_completed(db, log_name, min_en
     return end_set
 
 
-async def find_next_task(ct_log_url, db, end_set, i, log_name, worker_name):
+async def find_next_task(ct_log_url, db, end_set, i, log_name, worker_name, tree_size):
     if i in end_set:
         return None
     else:
@@ -173,6 +173,7 @@ async def find_next_task(ct_log_url, db, end_set, i, log_name, worker_name):
             "ct_log_url": ct_log_url,
             "start": start,
             "end": end,
+            "sth_end": tree_size,
             "ip_address": ws.ip_address,
             "ctlog_request_interval_sec": WORKER_CTLOG_REQUEST_INTERVAL_SEC
         }

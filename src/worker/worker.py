@@ -438,8 +438,11 @@ def handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, task_re
             # If the job is complete, perform DNS check before generating the next range job
             if args is not None:
                 wait_for_manager_api_ready(args.manager)
-            next_start = last_job["end"] + 1
-            next_end = last_job["end"] + batch_size
+            sth_end = last_job.get("sth_end", last_job["end"])
+            next_start = random.randint(last_job["end"] + 1, sth_end // 16000) * 16000  # pick a random start point aligned to 16000
+            next_end = next_start + batch_size - 1
+            if next_end > sth_end:
+                next_end = sth_end
             logger.warning(
                 f"{category}: API failure/exception occurred {fail_count} times, autonomously generating the next range job (next range: {next_start}-{next_end}): Autonomous recovery succeeded ✅")
             new_task = last_job.copy()
