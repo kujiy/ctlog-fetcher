@@ -3,12 +3,11 @@ import time
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 
-from src.config import WORKER_LIVENESS_TTL, WORKER_DEAD_THRESHOLD_MINS
+from src.config import WORKER_LIVENESS_TTL, WORKER_DEAD_THRESHOLD_MINS, JST
 from src.share.logger import logger
 from src.share.job_status import JobStatus
 from .. import models
 from ..db import get_async_session
-JST = timezone(timedelta(hours=9))
 
 async def worker_liveness_monitor():
     """

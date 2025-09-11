@@ -1,15 +1,12 @@
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from logging import getLogger
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import create_engine, select
-
+from sqlalchemy import select
 from src.manager_api.db import get_async_session
-from src.manager_api.models import LogFetchProgress, LogFetchProgressHistory, Base
+from src.manager_api.models import LogFetchProgress, LogFetchProgressHistory
+from src.config import JST
 
 logger = getLogger("uvicorn")
-JST = timezone(timedelta(hours=9))
-
 
 async def save_log_fetch_progress_snapshot(session):
     try:

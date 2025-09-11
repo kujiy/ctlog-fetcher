@@ -10,13 +10,11 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import os
 from typing import Any
-import asyncio
 import httpx
 from datetime import datetime, timedelta, timezone
-import traceback
 from src.ui.background_jobs.ui_snapshot_json import load_snapshot, \
     start_ui_snapshot_json
-from src.config import CT_LOG_ENDPOINTS, MANAGER_API_URL_FOR_UI, METRICS_URL
+from src.config import JST, MANAGER_API_URL_FOR_UI, METRICS_URL
 from src.ui.metrics_utils import parse_metrics_text
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
@@ -25,7 +23,6 @@ logger = app.logger = getLogger("uvicorn")
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "templates")
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
 
-JST = timezone(timedelta(hours=9))
 logger.warning(f"MANAGER_API_URL: {MANAGER_API_URL_FOR_UI}")
 
 

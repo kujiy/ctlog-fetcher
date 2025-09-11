@@ -53,7 +53,9 @@ class LatencySamplingMiddleware(BaseHTTPMiddleware):
             # Create label only when needed (minimally reduces overhead)
             route = request.scope.get("route")
             path_template = getattr(route, "path", raw_path)
-
-            REQUEST_LATENCY.labels(request.method, path_template).observe(elapsed)
+            try:
+                REQUEST_LATENCY.labels(request.method, path_template).observe(elapsed)
+            except:
+                return response
 
         return response

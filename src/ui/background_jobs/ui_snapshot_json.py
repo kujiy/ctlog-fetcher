@@ -5,8 +5,8 @@ import httpx
 from datetime import datetime, timedelta, timezone
 from src.share.logger import logger
 from src.config import MANAGER_API_URL_FOR_UI
+from src.config import JST
 
-JST = timezone(timedelta(hours=9))
 SNAPSHOT_PATH = os.path.join(os.path.dirname(__file__), "../snapshot.json")
 
 def load_snapshot():

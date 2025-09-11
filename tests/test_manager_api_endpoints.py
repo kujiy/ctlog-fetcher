@@ -11,7 +11,7 @@ from src.share.job_status import JobStatus
 @pytest.mark.asyncio
 async def test_worker_resume_request(monkeypatch):
     # Patch DB logic in endpoint
-    monkeypatch.setattr("src.manager_api.main.lock", asyncio.Lock())
+    monkeypatch.setattr("src.manager_api.locks", asyncio.Lock())
 
     # Mock get_async_session
     class _DummyResult:
@@ -35,7 +35,7 @@ async def test_worker_resume_request(monkeypatch):
     async def fake_get_async_session():
         yield _DummySession()
 
-    monkeypatch.setattr("src.manager_api.main.get_async_session", fake_get_async_session)
+    monkeypatch.setattr("src.manager_api.db.get_async_session", fake_get_async_session)
 
     payload = {
         "worker_name": "dummy_worker",
@@ -86,7 +86,7 @@ async def test_worker_ping(monkeypatch):
     # Patch update_worker_status_and_summary to avoid DB
     async def fake_update_worker_status_and_summary(data, db, status):
         return {"message": "ok"}
-    monkeypatch.setattr("src.manager_api.main.update_worker_status_and_summary", fake_update_worker_status_and_summary)
+    monkeypatch.setattr("src.manager_api.routers.worker_pings.update_worker_status_and_summary", fake_update_worker_status_and_summary)
     payload = {
         "worker_name": "dummy_worker",
         "log_name": "dummy_log",
@@ -111,7 +111,7 @@ async def test_worker_ping(monkeypatch):
 async def test_worker_completed(monkeypatch):
     async def fake_update_worker_status_and_summary(data, db, status):
         return {"message": "ok"}
-    monkeypatch.setattr("src.manager_api.main.update_worker_status_and_summary", fake_update_worker_status_and_summary)
+    monkeypatch.setattr("src.manager_api.routers.worker_pings.update_worker_status_and_summary", fake_update_worker_status_and_summary)
     payload = {
         "worker_name": "dummy_worker",
         "log_name": "dummy_log",
@@ -154,7 +154,6 @@ async def test_worker_error(monkeypatch, tmp_path):
         "traceback": "traceback info",
         "entry": json.dumps(ct_entry_dict)
     }
-    from src.manager_api.main import worker_error
     transport = ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
         response = await ac.post("/api/worker/error", json=payload)

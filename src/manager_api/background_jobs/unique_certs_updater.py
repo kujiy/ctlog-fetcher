@@ -1,10 +1,10 @@
 import asyncio
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import and_, func, text, select
+from sqlalchemy import select
 from src.manager_api.models import Cert, UniqueCert
 from src.manager_api.db import get_async_session
 from src.share.logger import logger
-JST = timezone(timedelta(hours=9))
+from src.config import JST
 
 _last_processed_cert_id = None
 _processing_lock = asyncio.Lock()

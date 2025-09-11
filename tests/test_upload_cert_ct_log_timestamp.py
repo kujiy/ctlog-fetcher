@@ -8,8 +8,10 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select
 
 from src.manager_api.models import Base, Cert
-from src.manager_api.main import upload_certificates
+
 from src.manager_api.base_models import UploadCertItem
+from src.manager_api.routers.worker_upload import upload_certificates
+
 
 @pytest.mark.asyncio
 async def test_upload_cert_ct_log_timestamp(monkeypatch, tmp_path):

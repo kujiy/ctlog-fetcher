@@ -1,7 +1,4 @@
 import asyncio
-import time
-from datetime import datetime, timezone, timedelta
-
 from src.manager_api.db import get_async_session
 from src.manager_api.models import Cert, UniqueCertCounter
 from sqlalchemy import select, func, text
@@ -12,8 +9,6 @@ from cachetools import TTLCache
 
 BATCH_SIZE = 1000
 SLEEP_SEC = 0.5
-
-JST = timezone(timedelta(hours=9))
 
 async def fetch_and_update_unique_cert_counter():
     logger.info("  - 3️⃣  - fetch_and_update_unique_cert_counter")
