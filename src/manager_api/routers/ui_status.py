@@ -1,5 +1,5 @@
 from src.share.animal import get_worker_emoji
-from src.config import JST, BATCH_SIZE
+from src.config import JST, BATCH_SIZE, ORDERED_CATEGORIES
 from src.manager_api.db import get_async_session
 from src.manager_api.models import WorkerLogStat, WorkerStatus
 from datetime import datetime, timedelta

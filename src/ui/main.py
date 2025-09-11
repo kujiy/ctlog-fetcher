@@ -367,6 +367,7 @@ async def log_history_page(request: Request, log_name: str):
         "log_name": log_name,
         "history": history,
         "graph_data": graph_data,
+        "snapshot_timestamp": history[0].get("snapshot_timestamp") if history else None,
         "error": data.get("error")
     })
 

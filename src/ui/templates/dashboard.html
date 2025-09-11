@@ -174,8 +174,13 @@
 
 
     <h2>Progress by Log</h2>
-    <p>Completed: {{ completed_logs }} / {{ total_logs }}</p>
+    <div style="margin-bottom: 0.5em; color: #888; float:left;">
+        Completed: {{ completed_logs }} / {{ total_logs }}
+    </div>
     {% if log_progress_list %}
+        <div style="margin-bottom: 0.5em; color: #888; float:right;">
+            Diff comparison time: {{ log_progress_list.0.diff.snapshot_timestamp }}
+        </div>
         <table>
             <tr>
                 <th>category</th>

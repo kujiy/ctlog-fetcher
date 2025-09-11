@@ -91,7 +91,7 @@ async def get_logs_progress(db=Depends(get_async_session)):
     for p in progress_rows:
         log_dict = {k: v for k, v in p.__dict__.items() if not k.startswith('_')}
         # diff calculation with latest snapshot
-        diff = {}
+        diff = {"snapshot_timestamp": h.snapshot_timestamp}
         h = latest_snapshots.get(p.log_name)
         if h:
             diff["sth_end"] = (p.sth_end or 0) - (h.sth_end or 0)
