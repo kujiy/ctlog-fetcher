@@ -2,10 +2,11 @@ import random
 from datetime import datetime
 from fastapi import Query, Depends, APIRouter
 from sqlalchemy import and_, select
-from src.config import JST, BATCH_SIZE, MAX_WORKER_THREADS, MAX_THREADS_PER_WORKER
+from src.config import JST, BATCH_SIZE, MAX_WORKER_THREADS, MAX_THREADS_PER_WORKER, MAX_COMPLETED_JOBS_PER_DDOS_ADJUST_INTERVAL, \
+    MIN_THREADS_PER_WORKER, DDOS_ADJUST_INTERVAL_MINUTES
 from src.manager_api.db import get_async_session
 from src.manager_api import locks
-from src.manager_api.db_query import get_running_worker_count
+from src.manager_api.db_query import get_running_thread_count, get_completed_thread_count_last_min
 from src.manager_api.models import CTLogSTH, WorkerStatus, LogFetchProgress
 from src.config import CT_LOG_ENDPOINTS, LOG_FETCH_PROGRESS_TTL, \
     WORKER_CTLOG_REQUEST_INTERVAL_SEC, ORDERED_CATEGORIES, STH_FETCH_INTERVAL_SEC
@@ -49,25 +50,19 @@ async def get_worker_categories(db = Depends(get_async_session)):
 
 # DDoS adjuster: limit number of categories according to number of running workers
 async def ddos_adjuster(db, ordered_categories):
-    total_running_count = 200#await get_running_worker_count(db)
-    max_cat_count = calculate_threads(total_running_count, MAX_WORKER_THREADS)
+    total_completed_thread_count = await get_completed_thread_count_last_min(db, DDOS_ADJUST_INTERVAL_MINUTES)   # 100
+    max_cat_count = calculate_threads(total_completed_thread_count, MAX_COMPLETED_JOBS_PER_DDOS_ADJUST_INTERVAL)
     # reduce len(ordered_categories) according to threads
-    ordered_categories = ordered_categories[:max_cat_count]
+    ordered_categories = ordered_categories[:max_cat_count - 1]
     return ordered_categories
 
 
-def calculate_threads(total_worker_count, max_worker_threads) -> int:
-    """
-    Returns threads such that:
-    total_worker_count * threads ≈ max_worker_threads,
-    using probabilistic rounding.
-    The result is limited to [0, 7].
-    """
-    if total_worker_count == 0:
+def calculate_threads(total_completed_thread_count: int, limit: int) -> int:
+    if total_completed_thread_count == 0:
         return 0
-    value = max_worker_threads / total_worker_count
-    result = probabilistic_round(value)
-    return max(min(result, MAX_THREADS_PER_WORKER), 0)
+    if total_completed_thread_count > limit:
+        return random.randint(MIN_THREADS_PER_WORKER, MAX_THREADS_PER_WORKER - 3)
+    return MAX_THREADS_PER_WORKER
 
 
 
