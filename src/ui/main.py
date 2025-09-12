@@ -395,6 +395,38 @@ async def metrics_page(request: Request):
         "error_message": error_message
     })
 
+@app.get("/worker-completion-stats", response_class=HTMLResponse)
+async def worker_completion_stats_page(request: Request):
+    """
+    Fetches and displays worker completion statistics by hour.
+    """
+    completion_stats = []
+    error_message = None
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/worker_completion_stats")
+            if resp.status_code == 200:
+                data = resp.json()
+                completion_stats = data.get("worker_completion_stats", [])
+                query_timestamp = data.get("query_timestamp")
+                total_records = data.get("total_records", 0)
+                if "error" in data:
+                    error_message = data["error"]
+            else:
+                error_message = f"API returned status code: {resp.status_code}"
+    except Exception as e:
+        error_message = str(e)
+        query_timestamp = None
+        total_records = 0
+    
+    return templates.TemplateResponse("worker_completion_stats.html", {
+        "request": request,
+        "completion_stats": completion_stats,
+        "error_message": error_message,
+        "query_timestamp": query_timestamp,
+        "total_records": total_records
+    })
+
 # API example: Get collection status
 @app.get("/api/ui/status")
 def get_status():

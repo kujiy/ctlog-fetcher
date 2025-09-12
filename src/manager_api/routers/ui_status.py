@@ -1,11 +1,14 @@
-from src.manager_api.db_query import get_running_worker_count
+from asyncache import cached
+from cachetools import TTLCache
+
+from src.manager_api.db_query import get_running_thread_count
 from src.share.animal import get_worker_emoji
 from src.config import JST, BATCH_SIZE, ORDERED_CATEGORIES
 from src.manager_api.db import get_async_session
 from src.manager_api.models import WorkerLogStat, WorkerStatus
 from datetime import datetime, timedelta
 from fastapi import Depends, APIRouter
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from src.share.job_status import JobStatus
 
 # background jobs
@@ -147,12 +150,12 @@ async def get_workers_status(db=Depends(get_async_session)):
     # Fetch up to 100 records with status=running
     stmt_running = select(WorkerStatus).where(WorkerStatus.status == JobStatus.RUNNING.value).order_by(WorkerStatus.last_ping.desc()).limit(100)
     running_workers = (await db.execute(stmt_running)).scalars().all()
-    total_running_count = None
+    total_running_thread_count = None
     # If fewer than 100 running workers, fetch additional records with other statuses
     if len(running_workers) == 100:
         last_100 = running_workers
         # actual count of running workers
-        total_running_count = await get_running_worker_count(db)
+        total_running_thread_count = await get_running_thread_count(db)
     else:
         remaining_limit = 100 - len(running_workers)
         stmt_other = select(WorkerStatus).where(WorkerStatus.status != JobStatus.RUNNING.value).order_by(WorkerStatus.last_ping.desc()).limit(remaining_limit)
@@ -176,7 +179,7 @@ async def get_workers_status(db=Depends(get_async_session)):
             "start": w.start,
             "end": w.end
         })
-    threads = total_running_count or len([w for w in last_100 if w.status == JobStatus.RUNNING.value])
+    threads = total_running_thread_count or len([w for w in last_100 if w.status == JobStatus.RUNNING.value])
     return {
         "summary": {
             "threads": threads,
@@ -186,3 +189,47 @@ async def get_workers_status(db=Depends(get_async_session)):
         },
         "workers": workers
     }
+
+# Worker completion statistics by hour
+@cached(TTLCache(maxsize=1, ttl=600))
+@router.get("/api/worker_completion_stats")
+async def get_worker_completion_stats(db=Depends(get_async_session)):
+    """
+    Get worker completion statistics grouped by hour for the last 256 hours.
+    Returns hourly counts of completed workers.
+    """
+    # Use raw SQL query as provided by the user
+    query = text("""
+        SELECT
+            DATE_FORMAT(worker_status.last_ping, '%Y-%m-%d %H:00:00') AS hour_bucket,
+            COUNT(*) AS completed_count
+        FROM worker_status
+        WHERE worker_status.status = 'completed'
+          AND worker_status.last_ping >= NOW() - INTERVAL 256 HOUR
+        GROUP BY hour_bucket
+        ORDER BY hour_bucket
+    """)
+
+    try:
+        result = await db.execute(query)
+        rows = result.fetchall()
+
+        stats = []
+        for row in rows:
+            stats.append({
+                "hour_bucket": row[0],
+                "completed_count": row[1]
+            })
+
+        return {
+            "worker_completion_stats": stats,
+            "total_records": len(stats),
+            "query_timestamp": datetime.now(JST).isoformat()
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "worker_completion_stats": [],
+            "total_records": 0,
+            "query_timestamp": datetime.now(JST).isoformat()
+        }
