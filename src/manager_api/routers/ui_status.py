@@ -1,3 +1,4 @@
+from src.manager_api.db_query import get_running_worker_count
 from src.share.animal import get_worker_emoji
 from src.config import JST, BATCH_SIZE, ORDERED_CATEGORIES
 from src.manager_api.db import get_async_session
@@ -11,55 +12,6 @@ from src.share.job_status import JobStatus
 
 router = APIRouter()
 
-
-
-# Status information per worker
-@router.get("/api/workers_status")
-async def get_workers_status(db=Depends(get_async_session)):
-    workers = []
-    # Fetch up to 100 records with status=running
-    stmt_running = select(WorkerStatus).where(WorkerStatus.status == JobStatus.RUNNING.value).order_by(WorkerStatus.last_ping.desc()).limit(100)
-    running_workers = (await db.execute(stmt_running)).scalars().all()
-    total_running_count = None
-    # If fewer than 100 running workers, fetch additional records with other statuses
-    if len(running_workers) == 100:
-        last_100 = running_workers
-        # actual count of running workers
-        stmt_count = select(func.count()).where(WorkerStatus.status == JobStatus.RUNNING.value)
-        total_running_count = (await db.execute(stmt_count)).scalar_one()
-    else:
-        remaining_limit = 100 - len(running_workers)
-        stmt_other = select(WorkerStatus).where(WorkerStatus.status != JobStatus.RUNNING.value).order_by(WorkerStatus.last_ping.desc()).limit(remaining_limit)
-        other_workers = (await db.execute(stmt_other)).scalars().all()
-        last_100 = running_workers + other_workers
-    for w in last_100:
-        expected_total_count = (w.end - w.start + 1) if w.end and w.start is not None else 1
-        progress = (w.current - w.start) / expected_total_count if expected_total_count > 0 else 0
-        workers.append({
-            "worker_name": f"{get_worker_emoji(w.worker_name)} {w.worker_name}",
-            "log_name": w.log_name,
-            "current": w.current,
-            "progress": progress,
-            "last_ping": w.last_ping.isoformat() if w.last_ping else None,
-            "status": w.status,
-            "worker_fetched_count": w.current - w.start,
-            "last_uploaded_index": getattr(w, 'last_uploaded_index', None),
-            "jp_count": w.jp_count,
-            "jp_ratio": w.jp_ratio,
-            "ip_address": w.ip_address,
-            "start": w.start,
-            "end": w.end
-        })
-    threads = total_running_count or len([w for w in last_100 if w.status == JobStatus.RUNNING.value])
-    return {
-        "summary": {
-            "threads": threads,
-            "workers": int(threads / len(ORDERED_CATEGORIES)),
-            "recent_worker_names": len(set(w['worker_name'] for w in workers)),
-            "last_updated": last_100[0].last_ping.isoformat() if last_100 and last_100[0].last_ping else "-",
-        },
-        "workers": workers
-    }
 
 
 # ranking of workers by total fetched count and .jp count
@@ -186,3 +138,51 @@ async def get_worker_stats(worker_name: str, db=Depends(get_async_session)):
         "status_stats": status_stats,
     }
 
+
+
+# Status information per worker
+@router.get("/api/workers_status")
+async def get_workers_status(db=Depends(get_async_session)):
+    workers = []
+    # Fetch up to 100 records with status=running
+    stmt_running = select(WorkerStatus).where(WorkerStatus.status == JobStatus.RUNNING.value).order_by(WorkerStatus.last_ping.desc()).limit(100)
+    running_workers = (await db.execute(stmt_running)).scalars().all()
+    total_running_count = None
+    # If fewer than 100 running workers, fetch additional records with other statuses
+    if len(running_workers) == 100:
+        last_100 = running_workers
+        # actual count of running workers
+        total_running_count = await get_running_worker_count(db)
+    else:
+        remaining_limit = 100 - len(running_workers)
+        stmt_other = select(WorkerStatus).where(WorkerStatus.status != JobStatus.RUNNING.value).order_by(WorkerStatus.last_ping.desc()).limit(remaining_limit)
+        other_workers = (await db.execute(stmt_other)).scalars().all()
+        last_100 = running_workers + other_workers
+    for w in last_100:
+        expected_total_count = (w.end - w.start + 1) if w.end and w.start is not None else 1
+        progress = (w.current - w.start) / expected_total_count if expected_total_count > 0 else 0
+        workers.append({
+            "worker_name": f"{get_worker_emoji(w.worker_name)} {w.worker_name}",
+            "log_name": w.log_name,
+            "current": w.current,
+            "progress": progress,
+            "last_ping": w.last_ping.isoformat() if w.last_ping else None,
+            "status": w.status,
+            "worker_fetched_count": w.current - w.start,
+            "last_uploaded_index": getattr(w, 'last_uploaded_index', None),
+            "jp_count": w.jp_count,
+            "jp_ratio": w.jp_ratio,
+            "ip_address": w.ip_address,
+            "start": w.start,
+            "end": w.end
+        })
+    threads = total_running_count or len([w for w in last_100 if w.status == JobStatus.RUNNING.value])
+    return {
+        "summary": {
+            "threads": threads,
+            "workers": int(threads / len(ORDERED_CATEGORIES)),
+            "recent_worker_names": len(set(w['worker_name'] for w in workers)),
+            "last_updated": last_100[0].last_ping.isoformat() if last_100 and last_100[0].last_ping else "-",
+        },
+        "workers": workers
+    }
