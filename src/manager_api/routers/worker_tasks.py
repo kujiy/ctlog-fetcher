@@ -2,9 +2,10 @@ import random
 from datetime import datetime
 from fastapi import Query, Depends, APIRouter
 from sqlalchemy import and_, select
-from src.config import JST, BATCH_SIZE
+from src.config import JST, BATCH_SIZE, MAX_WORKER_THREADS, MAX_THREADS_PER_WORKER
 from src.manager_api.db import get_async_session
 from src.manager_api import locks
+from src.manager_api.db_query import get_running_worker_count
 from src.manager_api.models import CTLogSTH, WorkerStatus, LogFetchProgress
 from src.config import CT_LOG_ENDPOINTS, LOG_FETCH_PROGRESS_TTL, \
     WORKER_CTLOG_REQUEST_INTERVAL_SEC, ORDERED_CATEGORIES, STH_FETCH_INTERVAL_SEC
@@ -13,12 +14,13 @@ from src.manager_api.base_models import WorkerResumeRequestModel
 from cachetools import TTLCache
 from asyncache import cached
 from src.share.logger import logger
+from src.share.utils import probabilistic_round
 
 router = APIRouter()
 
 # --- Category Array API ---
 @router.get("/api/worker/categories")
-async def get_worker_categories():
+async def get_worker_categories(db = Depends(get_async_session)):
     """
     Returns a dict with all_categories and ordered_categories for worker dynamic thread management.
     Example:
@@ -29,21 +31,44 @@ async def get_worker_categories():
     """
     all_categories = list(CT_LOG_ENDPOINTS.keys())
     ordered_categories = ORDERED_CATEGORIES.copy()
-
-    """
-    remove digicert with 1/5 probability due to the rate limit
-    https://groups.google.com/a/chromium.org/g/ct-policy/c/XpmIf5DhfTg
-    """
-    if "digicert" in ordered_categories and random.randint(1, 5):
-        ordered_categories.remove("digicert")
-
     # e.g. google 3, digicert 1, cloudflare 1, letsencrypt 1, trustasia 1
     random.shuffle(ordered_categories)
+
+    # """
+    # remove digicert with 1/n probability due to the rate limit
+    # https://groups.google.com/a/chromium.org/g/ct-policy/c/XpmIf5DhfTg
+    # """
+    # if "digicert" in ordered_categories and random.randint(1, 3):
+    #     ordered_categories.remove("digicert")
+    ordered_categories = await ddos_adjuster(db, ordered_categories)
 
     return {
         "all_categories": all_categories,
         "ordered_categories": ordered_categories
     }
+
+# DDoS adjuster: limit number of categories according to number of running workers
+async def ddos_adjuster(db, ordered_categories):
+    total_running_count = 200#await get_running_worker_count(db)
+    max_cat_count = calculate_threads(total_running_count, MAX_WORKER_THREADS)
+    # reduce len(ordered_categories) according to threads
+    ordered_categories = ordered_categories[:max_cat_count]
+    return ordered_categories
+
+
+def calculate_threads(total_worker_count, max_worker_threads) -> int:
+    """
+    Returns threads such that:
+    total_worker_count * threads ≈ max_worker_threads,
+    using probabilistic rounding.
+    The result is limited to [0, 7].
+    """
+    if total_worker_count == 0:
+        return 0
+    value = max_worker_threads / total_worker_count
+    result = probabilistic_round(value)
+    return max(min(result, MAX_THREADS_PER_WORKER), 0)
+
 
 
 @router.get("/api/worker/next_task")
