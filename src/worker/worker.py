@@ -439,7 +439,7 @@ def handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, task_re
             if args is not None:
                 wait_for_manager_api_ready(args.manager)
             sth_end = last_job.get("sth_end", last_job["end"])
-            next_start = random.randint(last_job["end"] + 1, sth_end // 16000) * 16000  # pick a random start point aligned to 16000
+            next_start = random.randint(last_job["end"] + 1, sth_end) // 16000 * 16000  # pick a random start point aligned to 16000
             next_end = next_start + batch_size - 1
             if next_end > sth_end:
                 next_end = sth_end
