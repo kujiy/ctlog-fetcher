@@ -32,7 +32,7 @@ async def aggregate_log_fetch_progress():
                             else:
                                 i = BATCH_SIZE - 1
                             # speed up by fetching all completed ends at once
-                            completed_ends = await get_all_completed_worker_ends(log_name, session)
+                            completed_ends = await get_all_completed_worker_ends(log_name, min_completed_end, session)
                             # set for O(1) lookups that speeds up the loop
                             completed_ends_set = set(completed_ends)
                             while i <= max_end:
@@ -140,9 +140,10 @@ async def get_completed_worker_status(i, log_name, session):
     return completed
 
 # 新規: 一括取得
-async def get_all_completed_worker_ends(log_name, session):
+async def get_all_completed_worker_ends(log_name, min_completed_end, session):
     stmt = select(WorkerStatus.end).where(
         WorkerStatus.log_name == log_name,
+        WorkerStatus.end > min_completed_end,
         WorkerStatus.status.in_([JobStatus.COMPLETED.value, JobStatus.SKIPPED.value])
     )
     result = await session.execute(stmt)
