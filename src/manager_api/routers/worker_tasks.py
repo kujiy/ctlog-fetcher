@@ -1,12 +1,12 @@
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import Query, Depends, APIRouter
 from sqlalchemy import and_, select
 from src.config import JST, BATCH_SIZE, MAX_THREADS_PER_WORKER, MAX_COMPLETED_JOBS_PER_DDOS_ADJUST_INTERVAL, \
     MIN_THREADS_PER_WORKER, DDOS_ADJUST_INTERVAL_MINUTES
 from src.manager_api.db import get_async_session
 from src.manager_api import locks
-from src.manager_api.db_query import get_running_thread_count, get_completed_thread_count_last_min
+from src.manager_api.db_query import get_completed_thread_count_last_min
 from src.manager_api.models import CTLogSTH, WorkerStatus, LogFetchProgress
 from src.config import CT_LOG_ENDPOINTS, LOG_FETCH_PROGRESS_TTL, \
     WORKER_CTLOG_REQUEST_INTERVAL_SEC, ORDERED_CATEGORIES, STH_FETCH_INTERVAL_SEC
@@ -79,6 +79,7 @@ async def get_next_task(
 
         # Exclude log_name of completed past CT Logs or current CT Logs that have almost been retrieved
         exclude_log_names = await get_almost_completed_log_names(db, category)
+        exclude_log_names += await get_failed_log_names_by(db, worker_name)
         endpoints = [e for e in endpoints if e[0] not in exclude_log_names]
 
         random.shuffle(endpoints)
@@ -245,12 +246,23 @@ async def get_tree_size(ct_log_url, db):
 @cached(TTLCache(maxsize=100, ttl=STH_FETCH_INTERVAL_SEC))
 async def get_almost_completed_log_names(db, category):
     # Get all log_names and their fetch_rate for the category
-    stmt = select(LogFetchProgress.log_name, LogFetchProgress.fetch_rate).where(
+    stmt = select(LogFetchProgress.log_name).where(
         LogFetchProgress.category == category,
         LogFetchProgress.fetch_rate == 1
     )
     rows = (await db.execute(stmt)).all()
-    result = []
-    for log_name, fetch_rate in rows:
-        result.append(log_name)
-    return result
+    return [row[0] for row in rows]
+
+
+@cached(TTLCache(maxsize=256, ttl=60*10))
+async def get_failed_log_names_by(db, worker_name):
+    # 30 minutes ago
+    threshold = datetime.now(JST) - timedelta(minutes=30)
+    # Get all log_names and their fetch_rate for the category
+    stmt = select(WorkerStatus.log_name).where(
+        WorkerStatus.status == JobStatus.FAILED.value,
+        WorkerStatus.worker_name == worker_name,
+        WorkerStatus.last_ping > threshold
+    )
+    rows = (await db.execute(stmt)).all()
+    return [row[0] for row in rows]
