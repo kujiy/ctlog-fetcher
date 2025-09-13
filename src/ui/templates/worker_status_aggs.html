@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CT Log Fetcher - Worker Completion Statistics</title>
+    <!-- Favicon -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/images/favicon_io/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/images/favicon_io/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/assets/images/favicon_io/favicon-16x16.png">
+    <link rel="manifest" href="/assets/images/favicon_io/site.webmanifest">
+    <link rel="shortcut icon" href="/assets/images/favicon_io/favicon.ico">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; margin: 2em; }
+        h1 { color: #2c3e50; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 2em; }
+        th, td { border: 1px solid #ccc; padding: 0.5em; text-align: left; }
+        th { background: #f4f4f4; }
+        .nav-links a { margin-right: 1em; text-decoration: none; color: #3498db; }
+        .error { color: red; }
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+            margin-bottom: 2em;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Worker Status Aggregates (Hourly)</h1>
+
+    <div class="nav-links" style="margin-bottom: 2em;">
+        <a href="/">🏠 Dashboard</a>
+        <a href="/metrics">📊 Metrics</a>
+    </div>
+
+    {% if error_message %}
+        <div class="error">
+            <p>Error: {{ error_message }}</p>
+        </div>
+    {% endif %}
+
+    <section>
+    <h2>WorkerStatusAggs Table (All Records)</h2>
+    <p>All hourly aggregates of worker status (JobStatus別カウント含む)。</p>
+        {% if query_timestamp %}
+            <p>Data as of: {{ query_timestamp }}</p>
+        {% endif %}
+        {% if total_records %}
+            <p>Total records: {{ total_records }}</p>
+        {% endif %}
+
+        {% if aggs %}
+            <!-- Chart Container: JobStatusごとの推移 -->
+            <div class="chart-container">
+                <canvas id="statusAggsChart"></canvas>
+            </div>
+
+            <!-- show last_six_hours_average -->
+            <h2>Average completed workers in the last 6 hours:</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Average</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for status, v in last_six_hours_average.items() %}
+                    <tr>
+                        <th>{{ status }}</th>
+                        <td>{{ v.average }}</td>
+                        <td>{{ v.total }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+            <h2>WorkerStatusAggs Table</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Start Time</th>
+                        <th>End Time</th>
+                        <th>Total</th>
+                        <th>Completed</th>
+                        <th>Running</th>
+                        <th>Dead</th>
+                        <th>Failed</th>
+                        <th>Resume Wait</th>
+                        <th>Skipped</th>
+                        <th>Worker Name Count</th>
+                        <th>Log Name Count</th>
+                        <th>JP Count Sum</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in aggs|reverse %}
+                    <tr>
+                        <td>{{ row.start_time }}</td>
+                        <td>{{ row.end_time }}</td>
+                        <td>{{ row.total_worker_status_count }}</td>
+                        <td>{{ row.completed }}</td>
+                        <td>{{ row.running }}</td>
+                        <td>{{ row.dead }}</td>
+                        <td>{{ row.failed }}</td>
+                        <td>{{ row.resume_wait }}</td>
+                        <td>{{ row.skipped }}</td>
+                        <td>{{ row.worker_name_count }}</td>
+                        <td>{{ row.log_name_count }}</td>
+                        <td>{{ row.jp_count_sum }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    // Prepare data for Chart.js
+const labels = [{{ aggs|map(attribute='start_time')|map('string')|map('default', '')|map('tojson')|join(',') }}];
+const completed = [{{ aggs|map(attribute='completed')|join(',') }}];
+const running = [{{ aggs|map(attribute='running')|join(',') }}];
+const dead = [{{ aggs|map(attribute='dead')|join(',') }}];
+const failed = [{{ aggs|map(attribute='failed')|join(',') }}];
+const resume_wait = [{{ aggs|map(attribute='resume_wait')|join(',') }}];
+const skipped = [{{ aggs|map(attribute='skipped')|join(',') }}];
+                    const ctx = document.getElementById('statusAggsChart').getContext('2d');
+                    const chart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                { label: 'Completed', data: completed, borderColor: 'rgba(52,152,219,1)', backgroundColor: 'rgba(52,152,219,0.1)', borderWidth: 2, tension: 0.3 },
+                                { label: 'Running', data: running, borderColor: 'rgba(46,204,113,1)', backgroundColor: 'rgba(46,204,113,0.1)', borderWidth: 2, tension: 0.3 },
+                                { label: 'Dead', data: dead, borderColor: 'rgba(231,76,60,1)', backgroundColor: 'rgba(231,76,60,0.1)', borderWidth: 2, tension: 0.3 },
+                                { label: 'Failed', data: failed, borderColor: 'rgba(155,89,182,1)', backgroundColor: 'rgba(155,89,182,0.1)', borderWidth: 2, tension: 0.3 },
+                                { label: 'Resume Wait', data: resume_wait, borderColor: 'rgba(241,196,15,1)', backgroundColor: 'rgba(241,196,15,0.1)', borderWidth: 2, tension: 0.3 },
+                                { label: 'Skipped', data: skipped, borderColor: 'rgba(127,140,141,1)', backgroundColor: 'rgba(127,140,141,0.1)', borderWidth: 2, tension: 0.3 },
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                x: {
+                                    title: { display: true, text: 'Hour' },
+                                    ticks: { maxTicksLimit: 20, maxRotation: 45, minRotation: 45 }
+                                },
+                                y: {
+                                    beginAtZero: true,
+                                    title: { display: true, text: 'Count' }
+                                }
+                            },
+                            plugins: {
+                                title: { display: true, text: 'Worker Status Trend (JobStatus)', font: { size: 16 } },
+                                tooltip: {
+                                    callbacks: {
+                                        title: function(tooltipItems) { return tooltipItems[0].label; },
+                                        label: function(context) { return context.dataset.label + ': ' + context.parsed.y; }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                });
+            </script>
+        {% else %}
+            <p>No WorkerStatusAggs records available.</p>
+        {% endif %}
+    </section>
+</body>
+</html>

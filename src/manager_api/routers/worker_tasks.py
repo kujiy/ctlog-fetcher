@@ -2,7 +2,7 @@ import random
 from datetime import datetime
 from fastapi import Query, Depends, APIRouter
 from sqlalchemy import and_, select
-from src.config import JST, BATCH_SIZE, MAX_WORKER_THREADS, MAX_THREADS_PER_WORKER, MAX_COMPLETED_JOBS_PER_DDOS_ADJUST_INTERVAL, \
+from src.config import JST, BATCH_SIZE, MAX_THREADS_PER_WORKER, MAX_COMPLETED_JOBS_PER_DDOS_ADJUST_INTERVAL, \
     MIN_THREADS_PER_WORKER, DDOS_ADJUST_INTERVAL_MINUTES
 from src.manager_api.db import get_async_session
 from src.manager_api import locks
@@ -15,7 +15,7 @@ from src.manager_api.base_models import WorkerResumeRequestModel
 from cachetools import TTLCache
 from asyncache import cached
 from src.share.logger import logger
-from src.share.utils import probabilistic_round
+from src.share.utils import probabilistic_round_to_int
 
 router = APIRouter()
 
@@ -58,10 +58,8 @@ async def ddos_adjuster(db, ordered_categories):
 
 
 def calculate_threads(total_completed_thread_count: int, limit: int) -> int:
-    if total_completed_thread_count == 0:
-        return 0
     if total_completed_thread_count > limit:
-        return random.randint(MIN_THREADS_PER_WORKER, MAX_THREADS_PER_WORKER - 3)
+        return random.randint(MIN_THREADS_PER_WORKER, probabilistic_round_to_int(MAX_THREADS_PER_WORKER * 0.5))
     return MAX_THREADS_PER_WORKER
 
 

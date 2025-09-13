@@ -1,7 +1,7 @@
 # python
 import random
 
-def probabilistic_round(value) -> int:
+def probabilistic_round_to_int(value) -> int:
     """
     Probabilistically rounds a float to the nearest integer.
     E.g., 2.5 -> returns 2 or 3, with probability 0.5 for each.

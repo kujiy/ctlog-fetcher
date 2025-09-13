@@ -190,46 +190,42 @@ async def get_workers_status(db=Depends(get_async_session)):
         "workers": workers
     }
 
-# Worker completion statistics by hour
+# WorkerStatusAggs全件返却API
 @cached(TTLCache(maxsize=1, ttl=600))
-@router.get("/api/worker_completion_stats")
-async def get_worker_completion_stats(db=Depends(get_async_session)):
+@router.get("/api/worker_status_aggs")
+async def get_worker_status_aggs(db=Depends(get_async_session)):
     """
-    Get worker completion statistics grouped by hour for the last 256 hours.
-    Returns hourly counts of completed workers.
+    Get all WorkerStatusAggs records (hourly aggregated worker status counts, all JobStatus fields).
     """
-    # Use raw SQL query as provided by the user
-    query = text("""
-        SELECT
-            DATE_FORMAT(worker_status.last_ping, '%Y-%m-%d %H:00:00') AS hour_bucket,
-            COUNT(*) AS completed_count
-        FROM worker_status
-        WHERE worker_status.status = 'completed'
-          AND worker_status.last_ping >= NOW() - INTERVAL 256 HOUR
-        GROUP BY hour_bucket
-        ORDER BY hour_bucket
-    """)
-
+    from src.manager_api.models import WorkerStatusAggs
     try:
-        result = await db.execute(query)
-        rows = result.fetchall()
-
-        stats = []
+        stmt = select(WorkerStatusAggs).order_by(WorkerStatusAggs.start_time)
+        rows = (await db.execute(stmt)).scalars().all()
+        aggs = []
         for row in rows:
-            stats.append({
-                "hour_bucket": row[0],
-                "completed_count": row[1]
+            aggs.append({
+                "start_time": row.start_time.isoformat() if row.start_time else None,
+                "end_time": row.end_time.isoformat() if row.end_time else None,
+                "total_worker_status_count": getattr(row, "total_worker_status_count", None),
+                "completed": getattr(row, "completed", 0),
+                "running": getattr(row, "running", 0),
+                "dead": getattr(row, "dead", 0),
+                "failed": getattr(row, "failed", 0),
+                "resume_wait": getattr(row, "resume_wait", 0),
+                "skipped": getattr(row, "skipped", 0),
+                "worker_name_count": getattr(row, "worker_name_count", 0),
+                "log_name_count": getattr(row, "log_name_count", 0),
+                "jp_count_sum": getattr(row, "jp_count_sum", 0),
             })
-
         return {
-            "worker_completion_stats": stats,
-            "total_records": len(stats),
+            "worker_status_aggs": aggs,
+            "total_records": len(aggs),
             "query_timestamp": datetime.now(JST).isoformat()
         }
     except Exception as e:
         return {
             "error": str(e),
-            "worker_completion_stats": [],
+            "worker_status_aggs": [],
             "total_records": 0,
             "query_timestamp": datetime.now(JST).isoformat()
         }

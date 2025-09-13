@@ -13,7 +13,7 @@ async def get_latest_agg_time(session):
     stmt = select(func.max(WorkerStatusAggs.end_time))
     result = await session.execute(stmt)
     latest = result.scalar()
-    return latest
+    return latest.replace(tzinfo=JST) if latest and latest.tzinfo is None else latest
 
 def get_next_hour_range(latest_agg_time):
     if latest_agg_time is None:
@@ -27,35 +27,27 @@ def get_next_hour_range(latest_agg_time):
     end = start + timedelta(hours=1)
     return start, end
 
-async def get_id_range(session, start, end):
-    stmt = select(func.min(WorkerStatus.id), func.max(WorkerStatus.id)).where(
-        WorkerStatus.last_ping >= start,
-        WorkerStatus.last_ping < end
-    )
-    result = await session.execute(stmt)
-    min_id, max_id = result.first()
-    return min_id, max_id
 
-async def aggregate_worker_status(session, min_id, max_id):
+async def aggregate_worker_status(session, start, end):
     # statusごとのカウント
     stmt = select(WorkerStatus.status, func.count()).where(
-        and_(WorkerStatus.id >= min_id, WorkerStatus.id < max_id)
+        and_(WorkerStatus.last_ping >= start, WorkerStatus.last_ping < end)
     ).group_by(WorkerStatus.status)
     result = await session.execute(stmt)
     status_counts = dict(result.all())
 
     # 全体数
-    stmt = select(func.count()).where(and_(WorkerStatus.id >= min_id, WorkerStatus.id < max_id))
+    stmt = select(func.count()).where(and_(WorkerStatus.last_ping >= start, WorkerStatus.last_ping < end))
     total = (await session.execute(stmt)).scalar()
 
     # distinct worker_name, log_name
-    stmt = select(func.count(func.distinct(WorkerStatus.worker_name))).where(and_(WorkerStatus.id >= min_id, WorkerStatus.id < max_id))
+    stmt = select(func.count(func.distinct(WorkerStatus.worker_name))).where(and_(WorkerStatus.last_ping >= start, WorkerStatus.last_ping < end))
     worker_name_count = (await session.execute(stmt)).scalar()
 
-    stmt = select(func.count(func.distinct(WorkerStatus.log_name))).where(and_(WorkerStatus.id >= min_id, WorkerStatus.id < max_id))
+    stmt = select(func.count(func.distinct(WorkerStatus.log_name))).where(and_(WorkerStatus.last_ping >= start, WorkerStatus.last_ping < end))
     log_name_count = (await session.execute(stmt)).scalar()
 
-    stmt = select(func.coalesce(func.sum(WorkerStatus.jp_count), 0)).where(and_(WorkerStatus.id >= min_id, WorkerStatus.id < max_id))
+    stmt = select(func.coalesce(func.sum(WorkerStatus.jp_count), 0)).where(and_(WorkerStatus.last_ping >= start, WorkerStatus.last_ping < end))
     jp_count_sum = (await session.execute(stmt)).scalar()
 
     return {
@@ -77,22 +69,26 @@ async def worker_status_aggs():
         async for session in get_async_session():
             try:
                 latest_agg_time = await get_latest_agg_time(session)
-                # JSTのoffset-aware datetimeで現在時刻を取得
-                now = datetime.now(JST).replace(minute=0, second=0, microsecond=0)
-                target_time = now - timedelta(hours=1)
+                target_end_time = datetime.now(JST).replace(minute=0, second=0, microsecond=0)
+                logger.info(f"Latest agg time: {latest_agg_time}, Target End time: {target_end_time}")
                 while True:
                     start, end = get_next_hour_range(latest_agg_time)
                     # start, end, target_time すべてJSTのoffset-aware
-                    if end > target_time:
+                    if end > target_end_time:
+                        logger.info(f"End time {end} exceeds target time {target_end_time}, breaking loop.")
                         break
-                    min_id, max_id = await get_id_range(session, start, end)
-                    if min_id is None or max_id is None:
-                        print(f"No data to aggregate for {start} - {end}")
+                    # last_pingでデータが存在するか確認
+                    stmt = select(func.count()).where(
+                        and_(WorkerStatus.last_ping >= start, WorkerStatus.last_ping < end)
+                    )
+                    count = (await session.execute(stmt)).scalar()
+                    if count == 0:
+                        logger.info(f"No data to aggregate for {start} - {end}")
                         await register_zero(end, session, start)
                         latest_agg_time = end
                         continue
 
-                    agg = await aggregate_worker_status(session, min_id, max_id)
+                    agg = await aggregate_worker_status(session, start, end)
                     if agg is not None:
                         ws_agg = WorkerStatusAggs(
                             start_time=start,

@@ -12,6 +12,8 @@ import os
 from typing import Any
 import httpx
 from datetime import datetime, timedelta, timezone
+
+from src.share.job_status import ALL_JOB_STATUS
 from src.ui.background_jobs.ui_snapshot_json import load_snapshot, \
     start_ui_snapshot_json
 from src.config import JST, MANAGER_API_URL_FOR_UI, METRICS_URL
@@ -395,19 +397,37 @@ async def metrics_page(request: Request):
         "error_message": error_message
     })
 
-@app.get("/worker-completion-stats", response_class=HTMLResponse)
-async def worker_completion_stats_page(request: Request):
+
+def calc_last_six_hours_average(last_six_hours_records):
+    res = {}
+    for status in ALL_JOB_STATUS:
+        status_list = [rec for rec in last_six_hours_records if rec.get(status) == status]
+        total = sum(rec.get(status, 0) for rec in status_list)
+        avg = total / len(status_list) if status_list else 0
+        res[status] = {
+            "total": total,
+            "average": round(avg, 2)
+        }
+    res["total"] = {
+        "total": sum(res[status]["total"] for status in ALL_JOB_STATUS),
+        "average": round(sum(res[status]["average"] for status in ALL_JOB_STATUS)),
+    }
+    return res
+
+
+@app.get("/worker-status-aggs", response_class=HTMLResponse)
+async def worker_status_aggs_page(request: Request):
     """
-    Fetches and displays worker completion statistics by hour.
+    Fetches and displays all WorkerStatusAggs records (hourly aggregated worker status counts, all JobStatus fields).
     """
-    completion_stats = []
+    aggs = []
     error_message = None
     try:
         async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/worker_completion_stats")
+            resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/worker_status_aggs")
             if resp.status_code == 200:
                 data = resp.json()
-                completion_stats = data.get("worker_completion_stats", [])
+                aggs = data.get("worker_status_aggs", [])
                 query_timestamp = data.get("query_timestamp")
                 total_records = data.get("total_records", 0)
                 if "error" in data:
@@ -418,16 +438,16 @@ async def worker_completion_stats_page(request: Request):
         error_message = str(e)
         query_timestamp = None
         total_records = 0
-    last_six_hours_records = completion_stats[-6:] if len(completion_stats) >= 6 else completion_stats
-    last_six_hours_average = round(sum(item['completed_count'] for item in last_six_hours_records) / len(last_six_hours_records), 2) if last_six_hours_records else 0
+    last_six_hours_records = aggs[-6:] if len(aggs) >= 6 else aggs
+    last_six_hours_average = calc_last_six_hours_average(last_six_hours_records)
 
-    return templates.TemplateResponse("worker_completion_stats.html", {
+    return templates.TemplateResponse("worker_status_aggs.html", {
         "request": request,
-        "completion_stats": completion_stats,
+        "aggs": aggs,
         "error_message": error_message,
         "query_timestamp": query_timestamp,
         "total_records": total_records,
-        "last_six_hours_average": last_six_hours_average,
+        "last_six_hours_average": last_six_hours_average
     })
 
 # API example: Get collection status
