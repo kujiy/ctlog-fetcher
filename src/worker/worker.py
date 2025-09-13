@@ -111,7 +111,7 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
     task["ct_log_url"] = ct_log_url
     task["start"] = task.get('start')
     task["end"] = end
-    task["ip_address"] = get_my_ip()
+    task["ip_address"] = args.ip_address
     task["status"] = JobStatus.RUNNING.value
     jobkey = f"{category}_{log_name}_{current}_{end}"
     global_tasks[jobkey] = task
@@ -121,7 +121,7 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
     start_time = time.time()
     last_uploaded_index = None
     empty_entries_count = 0
-    my_ip = get_my_ip()
+    my_ip = get_public_ip_address_hash()
     worker_jp_count = 0
     worker_total_count = 0
 
@@ -1029,19 +1029,6 @@ def sleep_with_stop_check(seconds: int, stop_event: threading.Event = None):
             break
         time.sleep(1)
 
-def get_my_ip():
-    return None
-    ## Removed because of the privacy
-    # try:
-    #     resp = requests.get("https://ifconfig.io/ip", timeout=5)
-    #     if resp.status_code == 200:
-    #         return resp.text.strip()
-    #     else:
-    #         return "unknown"
-    # except Exception:
-    #     return "unknown"
-
-
 
 # --- Startup manager API connectivity check ---
 """
@@ -1139,11 +1126,24 @@ def validate_worker_name(worker_name):
         return default_worker_name()
     return worker_name
 
+def get_public_ip_address_hash():
+    try:
+        resp = requests.get("https://ifconfig.io/ip", timeout=5)
+        if resp.status_code == 200:
+            ip = resp.text.strip()
+            ip_hash = hashlib.sha256(ip.encode()).hexdigest()[:7]  # f0f1bcd
+            return ip_hash
+        else:
+            return "unknown"
+    except Exception:
+        return "unknown"
+
 if __name__ == '__main__':
     args = get_args()
 
     # worker_name validation
     args.worker_name = validate_worker_name(args.worker_name)
+    args.ip_address = get_public_ip_address_hash()
 
     # Print args line by line
     for k, v in vars(args).items():
