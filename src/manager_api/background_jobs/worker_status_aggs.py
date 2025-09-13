@@ -70,12 +70,12 @@ async def worker_status_aggs():
             try:
                 latest_agg_time = await get_latest_agg_time(session)
                 target_end_time = datetime.now(JST).replace(minute=0, second=0, microsecond=0)
-                logger.info(f"Latest agg time: {latest_agg_time}, Target End time: {target_end_time}")
+                logger.info(f"      -  6️⃣ Latest agg time: {latest_agg_time}, Target End time: {target_end_time}")
                 while True:
                     start, end = get_next_hour_range(latest_agg_time)
                     # start, end, target_time すべてJSTのoffset-aware
                     if end > target_end_time:
-                        logger.info(f"End time {end} exceeds target time {target_end_time}, breaking loop.")
+                        logger.info(f"      -  6️⃣ End time {end} exceeds target time {target_end_time}, breaking loop.")
                         break
                     # last_pingでデータが存在するか確認
                     stmt = select(func.count()).where(
@@ -104,8 +104,8 @@ async def worker_status_aggs():
                 print("[❌ WorkerStatusAggs ]Error:", e)
                 await session.rollback()
                 await session.close()
-            logger.info(f"      - 6️⃣ worker_status_aggs - sleep_before_loop=3600s")
-            await asyncio.sleep(3600)
+            logger.info(f"      - 6️⃣ worker_status_aggs - sleep_before_loop=600s")
+            await asyncio.sleep(600)
 
 
 async def register_zero(end, session, start):
