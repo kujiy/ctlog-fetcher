@@ -131,7 +131,7 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
 
     try:
         jp_certs_buffer = []
-        ping_interval_sec = 1
+        ping_interval_sec = 60
         while current <= end and not my_stop_event.is_set():
             logger.debug(f"[DEBUG] Loop: category={category} log_name={log_name} current={current} end={end}")
             omikuji = random.choice(omikuji_list)
@@ -158,7 +158,7 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
             logger.debug(f"[DEBUG] Fetched entries: {actual_entry_size} (current={current})")
 
             if empty_entries_count > 10:  # 1 + 2 + 4 + 8 + 16 + 32 + 60 + 60 + 60 + 60 = 303 seconds max wait(5 min)
-                logger.debug(f"[WARN] Entries were empty 10 times in a row: category={category} log_name={log_name} current={current}")
+                logger.warning(f"[WARN] Entries were empty 10 times in a row: category={category} log_name={log_name} current={current} end={end}")
                 send_failed(args, log_name, ct_log_url, task, end, current,
                             last_uploaded_index, worker_jp_count, worker_total_count, my_ip)
                 break
