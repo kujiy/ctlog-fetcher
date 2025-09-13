@@ -16,6 +16,7 @@ from cachetools import TTLCache
 from asyncache import cached
 from src.share.logger import logger
 from src.share.utils import probabilistic_round_to_int
+from collections import Counter
 
 router = APIRouter()
 
@@ -79,7 +80,9 @@ async def get_next_task(
 
         # Exclude log_name of completed past CT Logs or current CT Logs that have almost been retrieved
         exclude_log_names = await get_almost_completed_log_names(db, category)
+        # Exclude log_name that the worker has failed or dead recently(rate limit avoidance)
         exclude_log_names += await get_failed_log_names_by(db, worker_name)
+        exclude_log_names += await get_dead_log_names_by(db, worker_name)
         endpoints = [e for e in endpoints if e[0] not in exclude_log_names]
 
         random.shuffle(endpoints)
@@ -266,3 +269,18 @@ async def get_failed_log_names_by(db, worker_name):
     )
     rows = (await db.execute(stmt)).all()
     return [row[0] for row in rows]
+
+@cached(TTLCache(maxsize=256, ttl=60*10))
+async def get_dead_log_names_by(db, worker_name):
+    # 30 minutes ago
+    threshold = datetime.now(JST) - timedelta(minutes=30)
+    # Get all log_names and their fetch_rate for the category
+    stmt = select(WorkerStatus.log_name).where(
+        WorkerStatus.status == JobStatus.DEAD.value,
+        WorkerStatus.worker_name == worker_name,
+        WorkerStatus.last_ping > threshold
+    )
+    rows = (await db.execute(stmt)).all()
+    log_names = [row[0] for row in rows]  # ['nimbus2026', 'nimbus2025', 'nimbus2025', 'nimbus2025', 'nimbus2025', 'nimbus2025', 'nimbus2025']
+    count = Counter(log_names)  # Counter({'nimbus2025': 6, 'nimbus2026': 1})
+    return [log_name for log_name, c in count.items() if c > 10]  # if failed less than n times in the last 30 minutes

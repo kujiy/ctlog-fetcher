@@ -88,7 +88,7 @@ class WorkerStatus(Base):
     end = Column(BigInteger)
     current = Column(BigInteger)                        # All indices up to this are processed
     last_uploaded_index = Column(BigInteger, default=None)    # Last index where upload succeeded
-    status = Column(String(32))  # running, finished, resume_wait, etc
+    status = Column(String(32))  # JobStatus - running, finished, resume_wait, etc
     last_ping = Column(DateTime)
     ip_address = Column(String(64), default=None)
     jp_count = Column(BigInteger, default=0)
