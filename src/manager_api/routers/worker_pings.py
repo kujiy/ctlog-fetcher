@@ -65,8 +65,8 @@ async def update_worker_status_and_summary(data: WorkerPingModel | WorkerPingBas
             await db.commit()
             # update the summary table
             stat_stmt = select(WorkerLogStat).where(
-                WorkerLogStat.log_name==ws.log_name,
-                WorkerLogStat.worker_name==ws.worker_name
+                WorkerLogStat.log_name == ws.log_name,
+                WorkerLogStat.worker_name == ws.worker_name
             )
             stat = (await db.execute(stat_stmt)).scalars().first()
             if not stat:
