@@ -435,7 +435,7 @@ async def worker_status_aggs_page(request: Request):
         error_message = str(e)
         query_timestamp = None
         total_records = 0
-    last_six_hours_records = aggs[-6:] if len(aggs) >= 6 else aggs
+    last_six_hours_records = aggs[-7:-1] if len(aggs) >= 7 else aggs  # The last entry is less than one hour old, so it is excluded.
     last_six_hours_average = calc_last_six_hours_average(last_six_hours_records)
 
     return templates.TemplateResponse("worker_status_aggs.html", {
