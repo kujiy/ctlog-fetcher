@@ -1,12 +1,12 @@
 import asyncio
-import time
-from datetime import datetime, timedelta, timezone
-from sqlalchemy import select
+from datetime import datetime, timedelta
+
+from sqlalchemy import select, func
 
 from src.config import WORKER_LIVENESS_TTL, WORKER_DEAD_THRESHOLD_MINS, JST
+from src.manager_api.models import WorkerStatus
 from src.share.logger import logger
 from src.share.job_status import JobStatus
-from .. import models
 from ..db import get_async_session
 
 async def worker_liveness_monitor():
@@ -20,20 +20,33 @@ async def worker_liveness_monitor():
                 now = datetime.now(JST)
                 threshold = now - timedelta(minutes=WORKER_DEAD_THRESHOLD_MINS)
                 result = await session.execute(
-                    select(models.WorkerStatus).where(
-                        models.WorkerStatus.status.in_([JobStatus.RUNNING.value, JobStatus.RESUME_WAIT.value])
+                    select(WorkerStatus).where(
+                        WorkerStatus.status.in_([JobStatus.RUNNING.value, JobStatus.RESUME_WAIT.value]),
+                        WorkerStatus.last_ping < threshold
                     )
                 )
-                workers = result.scalars().all()
-                for w in workers:
-                    if await has_no_ping(threshold, w):
+                active_workers = result.scalars().all()
+                w: WorkerStatus
+                for w in active_workers:
+                    # I don't know why but some workers had this status. It must be treated as completed.
+                    if w.current in (w.end, w.end + 1):
+                        logger.info(f"status={w.status}")
+                        w.status = JobStatus.COMPLETED.value
+                    ## Digicert comes back, so commenting out the skip logic for now.
+                    ## this liveness monitor has been stopped due to a bug. Now we have too many dead workers, so almost jobs gonna be skipped. It's not good.
+                    ## maybe after cleaning up the old dead workers, we can enable it again.
+                    # elif await should_skip(w.log_name, w.start, w.end):
+                    #     # Update the status to SKIPPED
+                    #     w.status = JobStatus.SKIPPED.value
+                    elif await has_no_ping(threshold, w):
                         w.status = JobStatus.DEAD.value
                     else:
-                        if await should_skip(session, w):
-                            # Update the status to SKIPPED
-                            w.status = JobStatus.SKIPPED.value
+                        raise Exception("Logic error in worker_liveness_monitor")
+
                 await session.commit()
             logger.info(f"  - 2️⃣  - worker_liveness_monitor:sleep_inside_loop={WORKER_LIVENESS_TTL}s")
+
+            # interval between checks
             await asyncio.sleep(WORKER_LIVENESS_TTL)
     except asyncio.CancelledError:
         # Graceful shutdown
@@ -51,22 +64,31 @@ async def has_no_ping(threshold, w) -> bool:
     return False
 
 
-async def should_skip(session, w) -> bool:
-    # 100% completion judgment: last task may be less than BATCH_SIZE, so check if completed up to sth_end
-    count_stmt = models.WorkerStatus.__table__.count().where(
-        (models.WorkerStatus.log_name == w.log_name) &
-        (models.WorkerStatus.start == w.start) &
-        (models.WorkerStatus.end == w.end) &
-        (models.WorkerStatus.status.in_([JobStatus.DEAD.value, JobStatus.FAILED.value]))
-    )
-    count_result = await session.execute(count_stmt)
-    dead_count = count_result.scalar()
-    return dead_count > 3
+async def should_skip(log_name, start, end) -> bool:
+    # Use another session to avoid transaction issues
+    # If there are more than 3 DEAD or FAILED for the same (log_name, start, end), mark as SKIPPED(means the CT Log API is corrupted)
+    async for session in get_async_session():
+        # 100% completion judgment: last task may be less than BATCH_SIZE, so check if completed up to sth_end
+        count_stmt = (
+            select(func.count())
+            .select_from(WorkerStatus)
+            .where(
+                (WorkerStatus.log_name == log_name) &
+                (WorkerStatus.start == start) &
+                (WorkerStatus.end == end) &
+                (WorkerStatus.status.in_([JobStatus.DEAD.value, JobStatus.FAILED.value]))
+            )
+        )
+
+        count_result = await session.execute(count_stmt)
+        dead_count = count_result.scalar()
+        return dead_count > 3
 
 
 async def worker_liveness_monitor_with_sleep():
     logger.info(f"2️⃣  - worker_liveness_monitor_with_sleep - initial sleep:{WORKER_LIVENESS_TTL * 5} seconds")
-    await asyncio.sleep(WORKER_LIVENESS_TTL * 5)  # interval between fetches
+    # If an API has been dead, wait for a while until all workers send their last_ping. Otherwise, they may be marked as dead immediately.
+    await asyncio.sleep(WORKER_LIVENESS_TTL * 5)
     await worker_liveness_monitor()
 
 def start_worker_liveness_monitor():
