@@ -397,13 +397,11 @@ async def metrics_page(request: Request):
         "error_message": error_message
     })
 
-
 def calc_last_six_hours_average(last_six_hours_records):
     res = {}
     for status in ALL_JOB_STATUS:
-        status_list = [rec for rec in last_six_hours_records if rec.get(status) == status]
-        total = sum(rec.get(status, 0) for rec in status_list)
-        avg = total / len(status_list) if status_list else 0
+        total = sum(rec.get(status, 0) for rec in last_six_hours_records)
+        avg = total / len(last_six_hours_records) if last_six_hours_records else 0
         res[status] = {
             "total": total,
             "average": round(avg, 2)
@@ -413,7 +411,6 @@ def calc_last_six_hours_average(last_six_hours_records):
         "average": round(sum(res[status]["average"] for status in ALL_JOB_STATUS)),
     }
     return res
-
 
 @app.get("/worker-status-aggs", response_class=HTMLResponse)
 async def worker_status_aggs_page(request: Request):
