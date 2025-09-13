@@ -210,7 +210,7 @@ async def save_worker_status(ct_log_url, db, end, log_name, start, worker_name):
         end=end,
         current=start,
         status=JobStatus.RUNNING.value,
-        last_ping=None,
+        last_ping=datetime.now(JST),
         ip_address=None
     )
     db.add(ws)
