@@ -403,7 +403,7 @@ async def worker_completion_stats_page(request: Request):
     completion_stats = []
     error_message = None
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/worker_completion_stats")
             if resp.status_code == 200:
                 data = resp.json()
