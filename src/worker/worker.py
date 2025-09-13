@@ -1039,16 +1039,21 @@ def wait_for_manager_api_ready(manager_url):
     INTERVAL = 180
     parsed = urllib.parse.urlparse(manager_url)
     while True:
-        try:
-            # DNS resolution
-            socket.gethostbyname(parsed.hostname)
-        except Exception as e:
+        if is_dns_active(parsed):
+            logger.debug(f"[startup-check] Manager API DNS resolution succeeded.")
+            break
+        else:
             logger.warning(f"[startup-check] The manager API seems unreachable. Retrying in 180s.")
             time.sleep(INTERVAL)
-            continue
-        logger.debug(f"[startup-check] Manager API DNS resolution succeeded.")
-        break
 
+
+def is_dns_active(parsed):
+    try:
+        # DNS resolution
+        socket.gethostbyname(parsed.hostname)
+        return True
+    except Exception as e:
+        return False
 
 
 global_tasks = {}
