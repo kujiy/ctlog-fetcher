@@ -22,7 +22,11 @@ router = APIRouter()
 
 # --- Category Array API ---
 @router.get("/api/worker/categories")
-async def get_worker_categories(db = Depends(get_async_session)):
+async def get_worker_categories(
+        worker_name: str = Query("default"),
+        db = Depends(get_async_session)
+):
+    #TODO: Use worker_name for rate limit avoidance
     """
     Returns a dict with all_categories and ordered_categories for worker dynamic thread management.
     Example:
@@ -67,7 +71,7 @@ def calculate_threads(total_completed_thread_count: int, limit: int) -> int:
 
 @router.get("/api/worker/next_task")
 async def get_next_task(
-    worker_name: str = Query(...),
+    worker_name: str = Query("default"),
     category: str = Query(...),
     db=Depends(get_async_session)
 ):

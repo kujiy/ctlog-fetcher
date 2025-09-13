@@ -608,7 +608,7 @@ def category_thread_manager(args, executor, category_thread_info):
     last_all_categories = list(DEFAULT_CATEGORIES.keys())
     while not my_stop_event.is_set():
         try:
-            desired_counts, all_categories = fetch_categories(args.manager)
+            desired_counts, all_categories = fetch_categories(args.manager, args.worker_name)
             # Only update if fetch_categories succeeded (i.e., did not fall back to DEFAULT_CATEGORIES)
             if desired_counts != DEFAULT_CATEGORIES:
                 last_desired_counts = desired_counts
@@ -659,9 +659,9 @@ def category_thread_manager(args, executor, category_thread_info):
         sleep_with_stop_check(WORKER_THREAD_MANAGER_INTERVAL_SEC)
 
 ordered_categories = []
-def fetch_categories(domain: str):
+def fetch_categories(domain: str, worker_name: str):
     global ordered_categories
-    url = f"{domain}/api/worker/categories"
+    url = f"{domain}/api/worker/categories&worker_name={worker_name}"
     try:
         resp = requests.get(url, timeout=10)
         if resp.status_code == 200:
@@ -1114,6 +1114,7 @@ def get_args():
         help='Maximum number of ThreadPoolExecutor workers (default: 10) ENV: MAX_THREADS'
     )
     args = parser.parse_args()
+    args.worker_name = urllib.parse.quote(args.worker_name.strip())
 
     # If --proxies is not specified, split PROXIES env var by comma into a list
     if args.proxies is not None:
