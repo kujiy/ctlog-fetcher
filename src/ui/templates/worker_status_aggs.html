@@ -52,7 +52,22 @@
         {% endif %}
 
         {% if aggs %}
+
             <!-- Chart Container: JobStatusごとの推移 -->
+            <div style="margin-bottom:1em;">
+                <label for="daysSelect">Display period: </label>
+                <select id="daysSelect">
+                    <option value="all">All</option>
+                    <option value="60">Last 60 days</option>
+                    <option value="30">Last 30 days</option>
+                    <option value="7">Last 7 days</option>
+                    <option value="3">Last 3 days</option>
+                    <option value="1" selected>Last 1 day</option>
+                    <option value="custom">Custom</option>
+                </select>
+                <input type="number" id="customDays" min="1" max="365" placeholder="days" style="width:5em;display:none;">
+                <button id="applyDays" style="display:none;">Apply</button>
+            </div>
             <div class="chart-container">
                 <canvas id="statusAggsChart"></canvas>
             </div>
@@ -117,26 +132,33 @@
             </table>
             <script>
                 document.addEventListener('DOMContentLoaded', function() {
-                    // Prepare data for Chart.js
-const labels = [{{ aggs|map(attribute='start_time')|map('string')|map('default', '')|map('tojson')|join(',') }}];
-const completed = [{{ aggs|map(attribute='completed')|join(',') }}];
-const running = [{{ aggs|map(attribute='running')|join(',') }}];
-const dead = [{{ aggs|map(attribute='dead')|join(',') }}];
-const failed = [{{ aggs|map(attribute='failed')|join(',') }}];
-const resume_wait = [{{ aggs|map(attribute='resume_wait')|join(',') }}];
-const skipped = [{{ aggs|map(attribute='skipped')|join(',') }}];
+                    // Chart.js用データ
+                    const aggs = {{ aggs|tojson|safe }};
                     const ctx = document.getElementById('statusAggsChart').getContext('2d');
-                    const chart = new Chart(ctx, {
+                    // 初期データ
+                    function getDataRows(rows) {
+                        return {
+                            labels: rows.map(row => row.start_time),
+                            completed: rows.map(row => row.completed),
+                            running: rows.map(row => row.running),
+                            dead: rows.map(row => row.dead),
+                            failed: rows.map(row => row.failed),
+                            resume_wait: rows.map(row => row.resume_wait),
+                            skipped: rows.map(row => row.skipped)
+                        };
+                    }
+                    let dataRows = getDataRows(aggs);
+                    let chart = new Chart(ctx, {
                         type: 'line',
                         data: {
-                            labels: labels,
+                            labels: dataRows.labels,
                             datasets: [
-                                { label: 'Completed', data: completed, borderColor: 'rgba(52,152,219,1)', backgroundColor: 'rgba(52,152,219,0.1)', borderWidth: 2, tension: 0.3 },
-                                { label: 'Running', data: running, borderColor: 'rgba(46,204,113,1)', backgroundColor: 'rgba(46,204,113,0.1)', borderWidth: 2, tension: 0.3 },
-                                { label: 'Dead', data: dead, borderColor: 'rgba(231,76,60,1)', backgroundColor: 'rgba(231,76,60,0.1)', borderWidth: 2, tension: 0.3 },
-                                { label: 'Failed', data: failed, borderColor: 'rgba(155,89,182,1)', backgroundColor: 'rgba(155,89,182,0.1)', borderWidth: 2, tension: 0.3 },
-                                { label: 'Resume Wait', data: resume_wait, borderColor: 'rgba(241,196,15,1)', backgroundColor: 'rgba(241,196,15,0.1)', borderWidth: 2, tension: 0.3 },
-                                { label: 'Skipped', data: skipped, borderColor: 'rgba(127,140,141,1)', backgroundColor: 'rgba(127,140,141,0.1)', borderWidth: 2, tension: 0.3 },
+                                { label: 'Completed', data: dataRows.completed, borderColor: 'rgba(52,152,219,1)', backgroundColor: 'rgba(52,152,219,0.1)', borderWidth: 2, tension: 0.3 },
+                                { label: 'Running', data: dataRows.running, borderColor: 'rgba(46,204,113,1)', backgroundColor: 'rgba(46,204,113,0.1)', borderWidth: 2, tension: 0.3 },
+                                { label: 'Dead', data: dataRows.dead, borderColor: 'rgba(231,76,60,1)', backgroundColor: 'rgba(231,76,60,0.1)', borderWidth: 2, tension: 0.3 },
+                                { label: 'Failed', data: dataRows.failed, borderColor: 'rgba(155,89,182,1)', backgroundColor: 'rgba(155,89,182,0.1)', borderWidth: 2, tension: 0.3 },
+                                { label: 'Resume Wait', data: dataRows.resume_wait, borderColor: 'rgba(241,196,15,1)', backgroundColor: 'rgba(241,196,15,0.1)', borderWidth: 2, tension: 0.3 },
+                                { label: 'Skipped', data: dataRows.skipped, borderColor: 'rgba(127,140,141,1)', backgroundColor: 'rgba(127,140,141,0.1)', borderWidth: 2, tension: 0.3 },
                             ]
                         },
                         options: {
@@ -163,6 +185,60 @@ const skipped = [{{ aggs|map(attribute='skipped')|join(',') }}];
                             }
                         }
                     });
+
+                    // 日数選択UI
+                    const daysSelect = document.getElementById('daysSelect');
+                    const customDays = document.getElementById('customDays');
+                    const applyDays = document.getElementById('applyDays');
+
+
+                    // デフォルトで"Last 1 day"を選択
+                    function setDefaultDays() {
+                        daysSelect.value = '1';
+                        customDays.style.display = 'none';
+                        applyDays.style.display = 'none';
+                        updateChart(1);
+                    }
+                    setDefaultDays();
+
+                    daysSelect.addEventListener('change', function() {
+                        if (daysSelect.value === 'custom') {
+                            customDays.style.display = '';
+                            applyDays.style.display = '';
+                        } else {
+                            customDays.style.display = 'none';
+                            applyDays.style.display = 'none';
+                            updateChart(daysSelect.value);
+                        }
+                    });
+                    applyDays.addEventListener('click', function() {
+                        const val = parseInt(customDays.value, 10);
+                        if (!isNaN(val) && val > 0) {
+                            updateChart(val);
+                        }
+                    });
+
+                    function updateChart(days) {
+                        let filtered;
+                        if (days === 'all') {
+                            filtered = aggs;
+                        } else {
+                            const now = new Date();
+                            filtered = aggs.filter(row => {
+                                const t = new Date(row.start_time);
+                                return (now - t) <= days * 24 * 60 * 60 * 1000;
+                            });
+                        }
+                        let d = getDataRows(filtered);
+                        chart.data.labels = d.labels;
+                        chart.data.datasets[0].data = d.completed;
+                        chart.data.datasets[1].data = d.running;
+                        chart.data.datasets[2].data = d.dead;
+                        chart.data.datasets[3].data = d.failed;
+                        chart.data.datasets[4].data = d.resume_wait;
+                        chart.data.datasets[5].data = d.skipped;
+                        chart.update();
+                    }
                 });
             </script>
         {% else %}
