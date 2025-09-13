@@ -403,7 +403,7 @@ async def worker_completion_stats_page(request: Request):
     completion_stats = []
     error_message = None
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient() as client:
             resp = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/worker_completion_stats")
             if resp.status_code == 200:
                 data = resp.json()
@@ -418,13 +418,16 @@ async def worker_completion_stats_page(request: Request):
         error_message = str(e)
         query_timestamp = None
         total_records = 0
-    
+    last_six_hours_records = completion_stats[-6:] if len(completion_stats) >= 6 else completion_stats
+    last_six_hours_average = round(sum(item['completed_count'] for item in last_six_hours_records) / len(last_six_hours_records), 2) if last_six_hours_records else 0
+
     return templates.TemplateResponse("worker_completion_stats.html", {
         "request": request,
         "completion_stats": completion_stats,
         "error_message": error_message,
         "query_timestamp": query_timestamp,
-        "total_records": total_records
+        "total_records": total_records,
+        "last_six_hours_average": last_six_hours_average,
     })
 
 # API example: Get collection status
