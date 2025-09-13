@@ -1,7 +1,7 @@
 from asyncache import cached
 from cachetools import TTLCache
 
-from src.manager_api.db_query import get_running_thread_count
+from src.manager_api.db_query import get_running_thread_count, worker_status_range_total_count, aggregate_worker_status
 from src.share.animal import get_worker_emoji
 from src.config import JST, BATCH_SIZE, ORDERED_CATEGORIES
 from src.manager_api.db import get_async_session
@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 from fastapi import Depends, APIRouter
 from sqlalchemy import func, select, text
 from src.share.job_status import JobStatus
+from src.manager_api.models import WorkerStatusAggs
+from src.share.logger import logger
 
 # background jobs
 
@@ -191,13 +193,19 @@ async def get_workers_status(db=Depends(get_async_session)):
     }
 
 # WorkerStatusAggs全件返却API
+async def get_current_worker_status_aggs(db):
+    start = datetime.now(JST).replace(minute=0, second=0, microsecond=0)
+    end = datetime.now(JST)
+    count = await worker_status_range_total_count(end, db, start)
+    if count:
+        return start, end, await aggregate_worker_status(db, start, end)
+
 @cached(TTLCache(maxsize=1, ttl=600))
 @router.get("/api/worker_status_aggs")
 async def get_worker_status_aggs(db=Depends(get_async_session)):
     """
     Get all WorkerStatusAggs records (hourly aggregated worker status counts, all JobStatus fields).
     """
-    from src.manager_api.models import WorkerStatusAggs
     try:
         stmt = select(WorkerStatusAggs).order_by(WorkerStatusAggs.start_time)
         rows = (await db.execute(stmt)).scalars().all()
@@ -217,12 +225,29 @@ async def get_worker_status_aggs(db=Depends(get_async_session)):
                 "log_name_count": getattr(row, "log_name_count", 0),
                 "jp_count_sum": getattr(row, "jp_count_sum", 0),
             })
+        start, end, current_data = await get_current_worker_status_aggs(db)
+        if current_data:
+            aggs.append({
+                "start_time": start.isoformat(),
+                "end_time": end.isoformat(),
+                "total_worker_status_count": current_data.get("total_worker_status_count", 0),
+                "completed": current_data.get("completed", 0),
+                "running": current_data.get("running", 0),
+                "dead": current_data.get("dead", 0),
+                "failed": current_data.get("failed", 0),
+                "resume_wait": current_data.get("resume_wait", 0),
+                "skipped": current_data.get("skipped", 0),
+                "worker_name_count": current_data.get("worker_name_count", 0),
+                "log_name_count": current_data.get("log_name_count", 0),
+                "jp_count_sum": current_data.get("jp_count_sum", 0),
+            })
         return {
             "worker_status_aggs": aggs,
             "total_records": len(aggs),
             "query_timestamp": datetime.now(JST).isoformat()
         }
     except Exception as e:
+        logger.error(e)
         return {
             "error": str(e),
             "worker_status_aggs": [],
