@@ -111,6 +111,25 @@ class WorkerStatus(Base):
     )
 
 
+class WorkerStatusAggs(Base):
+    __tablename__ = 'worker_status_aggs'
+    id = Column(Integer, primary_key=True)
+    start_time = Column(DateTime, index=True)
+    end_time = Column(DateTime, index=True)
+    total_worker_status_count = Column(Integer, default=0)
+    # count of each JobStatus, including NULL
+    completed = Column(Integer, default=0)
+    running = Column(Integer, default=0)
+    dead = Column(Integer, default=0)
+    failed = Column(Integer, default=0)
+    resume_wait = Column(Integer, default=0)
+    skipped = Column(Integer, default=0)
+    
+    worker_name_count = Column(Integer, default=0)  # distinct worker_name count
+    log_name_count = Column(Integer, default=0)  # distinct log_name count
+    jp_count_sum = Column(BigInteger, default=0)
+
+
 class CTLogSTH(Base):
     __tablename__ = 'ct_log_sth'
     id = Column(Integer, primary_key=True, autoincrement=True)
