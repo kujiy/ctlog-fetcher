@@ -92,8 +92,8 @@ async def get_next_task(
         ## Exclude log_name that the worker has failed or dead recently(rate limit avoidance)
         # exclude_log_names += await get_failed_log_names_by(db, worker_name)
         # exclude_log_names += await get_dead_log_names_by(db, worker_name)
-        exclude_log_names += await rate_limit_candidate_log_names(db, worker_name)
-        exclude_log_names += await too_slow_log_names(db, worker_name)
+        # exclude_log_names += await rate_limit_candidate_log_names(db, worker_name)
+        exclude_log_names += await too_slow_log_names(db, ip_address_hash)
         endpoints = [e for e in endpoints if e[0] not in exclude_log_names]
 
         random.shuffle(endpoints)
@@ -297,12 +297,13 @@ async def get_dead_log_names_by(db, worker_name):
     return [log_name for log_name, c in count.items() if c > 10]  # if failed less than n times in the last 30 minutes
 
 
-async def too_slow_log_names(db, worker_name):
-    # そのworker nameで30分以上前のrunning な last_pingを持つlog_nameを取得
+async def too_slow_log_names(db, ip_address_hash):
+    # Rate limit avoidance: if there are many workers from the same IP, exclude logs that have been running for more than 30 minutes
+    # Retrieve the log_name with a running last_ping older than 30 minutes for that ip_address_hash
     threshold = datetime.now(JST) - timedelta(minutes=30)
     stmt = select(WorkerStatus.log_name).where(
         WorkerStatus.status == JobStatus.RUNNING.value,
-        WorkerStatus.worker_name == worker_name,
+        WorkerStatus.ip_address == ip_address_hash,
         WorkerStatus.last_ping < threshold
     )
     rows = (await db.execute(stmt)).all()
