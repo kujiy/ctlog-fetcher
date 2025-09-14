@@ -10,6 +10,7 @@
         th, td { border: 1px solid #ccc; padding: 0.5em; text-align: left; }
         th { background: #f4f4f4; }
         .highlight-green { background-color: #d4edda; }
+        .highlight-red { background-color: #f8d7da; }
         .nav-links a { margin-right: 1em; text-decoration: none; color: #3498db; }
         .small { font-size: 0.7em }
     </style>
@@ -169,7 +170,7 @@
                 <td class="highlight-green">{{ "{:,}".format(row.status_counts.completed) }}</td>
                 <td>{{ "{:,}".format(row.status_counts.running) }}</td>
                 <td>{{ "{:,}".format(row.status_counts.resume_wait) }}</td>
-                <td>{{ "{:,}".format(row.status_counts.dead) }}</td>
+                <td class="highlight-red">{{ "{:,}".format(row.status_counts.dead) }}</td>
                 <td>{{ "{:,}".format(row.jp_count_sum) }}</td>
                 <td class="small">
                     {% for log_name, count in row.log_name_counts.items() %}
