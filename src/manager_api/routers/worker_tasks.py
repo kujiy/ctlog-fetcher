@@ -1,7 +1,7 @@
 import random
 from datetime import datetime, timedelta
 from fastapi import Query, Depends, APIRouter
-from sqlalchemy import and_, select
+from sqlalchemy import and_, select, text
 from src.config import JST, BATCH_SIZE, MAX_THREADS_PER_WORKER, MAX_COMPLETED_JOBS_PER_DDOS_ADJUST_INTERVAL, \
     MIN_THREADS_PER_WORKER, DDOS_ADJUST_INTERVAL_MINUTES
 from src.manager_api.db import get_async_session
@@ -304,8 +304,8 @@ async def rate_limit_candidate_log_names(db, worker_name):
 
     Uses raw SQL for better performance compared to multiple subqueries.
     """
-    # 24 hours ago
-    threshold = datetime.now(JST) - timedelta(hours=24)
+    # n hours ago
+    threshold = datetime.now(JST) - timedelta(hours=2)
     threshold_str = threshold.strftime("%Y-%m-%d %H:%M:%S")
 
     # Use raw SQL for better performance
@@ -328,7 +328,7 @@ async def rate_limit_candidate_log_names(db, worker_name):
         "worker_name": worker_name
     }
 
-    rows = (await db.execute(raw_sql, params)).all()
+    rows = (await db.execute(text(raw_sql), params)).all()
 
     # Filter logs with unsuccessful_rate > 0.1 and include with 80% probability
     rate_limited_logs = []
