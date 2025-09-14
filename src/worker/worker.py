@@ -1157,7 +1157,7 @@ if __name__ == '__main__':
 
     # worker_name validation
     args.worker_name = validate_worker_name(args.worker_name)
-    args.ip_address = get_public_ip_address_hash()
+    # args.ip_address = get_public_ip_address_hash()  # get by the api side
 
     # Print args line by line
     for k, v in vars(args).items():

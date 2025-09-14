@@ -43,11 +43,12 @@ async def get_completed_rates(db, threshold: datetime):
     return result
 
 
-async def get_average_mins(db, threshold: datetime):
+async def get_durations(db, threshold: datetime):
     raw_sql = f"""
     SELECT
         worker_name,
-        ROUND(AVG(duration_sec) / 60, 2) AS average_min
+        ROUND(AVG(duration_sec) / 60, 2) AS average_min,
+        ROUND(MAX(duration_sec) / 60, 2) AS max_duration_min
     FROM worker_status
     WHERE last_ping > :threshold
         AND status = :completed
@@ -59,8 +60,8 @@ async def get_average_mins(db, threshold: datetime):
     }
     rows = (await db.execute(text(raw_sql), params)).all()
     result = {}
-    for worker_name, average_min in rows:
-        result[worker_name] = average_min
+    for worker_name, average_min, max_duration_min in rows:
+        result[worker_name] = (average_min, max_duration_min)
     return result
 
 
@@ -69,7 +70,7 @@ async def get_worker_ranking(db=Depends(get_async_session)):
     # Additional columns for latest metrics
     threshold = datetime.now(JST) - timedelta(hours=2)
     completed_rates = await get_completed_rates(db, threshold)
-    average_mins = await get_average_mins(db, threshold)
+    durations = await get_durations(db, threshold)
 
     stmt = select(
         WorkerLogStat.worker_name,
@@ -83,13 +84,15 @@ async def get_worker_ranking(db=Depends(get_async_session)):
         worker_total_count = r[1]
         jp_count = r[2] or 0
         jp_ratio = (jp_count / worker_total_count) if worker_total_count > 0 else 0
+        duration = durations.get(r[0], [0, 0])
         worker_total_count_ranking.append({
             "worker_name": worker_name,
             "worker_total_count": worker_total_count,
             "jp_count": jp_count,
             "jp_ratio": jp_ratio,
             "completed_rate": completed_rates.get(r[0], 0),
-            "average_min": average_mins.get(r[0], None),
+            "average_min": duration[0],
+            "max_duration_min": duration[1]
         })
 
     return {
