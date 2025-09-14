@@ -50,8 +50,8 @@ async def update_worker_status_and_summary(data: WorkerPingModel | WorkerPingBas
             WorkerStatus.start == data.start,
             WorkerStatus.end == data.end,
             # Guard: If already marked as completed etc, do not overwrite with later PINGs
-            WorkerStatus.status == JobStatus.RUNNING.value
-        )
+            WorkerStatus.status != JobStatus.COMPLETED.value
+        ).order_by(WorkerStatus.last_ping.desc())
         ws = (await db.execute(ws_stmt)).scalars().first()
         if ws:
             ws.worker_name = data.worker_name

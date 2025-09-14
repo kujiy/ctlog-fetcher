@@ -91,7 +91,7 @@ async def get_next_task(
         ## Exclude log_name that the worker has failed or dead recently(rate limit avoidance)
         # exclude_log_names += await get_failed_log_names_by(db, worker_name)
         # exclude_log_names += await get_dead_log_names_by(db, worker_name)
-        # exclude_log_names += await rate_limit_candidate_log_names(db, worker_name)
+        exclude_log_names += await rate_limit_candidate_log_names(db, worker_name)
         endpoints = [e for e in endpoints if e[0] not in exclude_log_names]
 
         random.shuffle(endpoints)
@@ -299,15 +299,15 @@ async def rate_limit_candidate_log_names(db, worker_name):
     """
     Return log_names that have high unsuccessful rate (dead + failed rate > 0.1)
     with 80% probability for each log to be included in the result.
-    
+
     This helps avoid rate limiting by spreading the load and avoiding problematic logs.
-    
+
     Uses raw SQL for better performance compared to multiple subqueries.
     """
     # 24 hours ago
     threshold = datetime.now(JST) - timedelta(hours=24)
     threshold_str = threshold.strftime("%Y-%m-%d %H:%M:%S")
-    
+
     # Use raw SQL for better performance
     raw_sql = """
     SELECT
@@ -321,15 +321,15 @@ async def rate_limit_candidate_log_names(db, worker_name):
         AND worker_name = :worker_name
     GROUP BY worker_name, log_name
     """
-    
+
     params = {
         "threshold": threshold_str,
         "running_status": JobStatus.RUNNING.value,
         "worker_name": worker_name
     }
-    
+
     rows = (await db.execute(raw_sql, params)).all()
-    
+
     # Filter logs with unsuccessful_rate > 0.1 and include with 80% probability
     rate_limited_logs = []
     for row in rows:
@@ -337,5 +337,5 @@ async def rate_limit_candidate_log_names(db, worker_name):
         # Include logs with unsuccessful_rate > 0.1 with 80% probability
         if unsuccessful_rate > 0.1 and random.random() < 0.8:
             rate_limited_logs.append(log_name)
-    
+
     return rate_limited_logs
