@@ -14,7 +14,13 @@ def probabilistic_round_to_int(value) -> int:
     else:
         return integer_part
 
+
 # worker.py and manager_api/routers/worker_pings.py
+def extract_ip_address_hash(request):
+    if request.client:
+        return convert_ip_address_hash(request.client.host)
+    return "unknown"
+
 def convert_ip_address_hash(ip):
     return hashlib.sha256(ip.encode()).hexdigest()[:7]  # f0f1bcd
 

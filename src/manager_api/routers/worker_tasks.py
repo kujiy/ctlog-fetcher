@@ -1,6 +1,6 @@
 import random
 from datetime import datetime, timedelta
-from fastapi import Query, Depends, APIRouter
+from fastapi import Query, Depends, APIRouter, Request
 from sqlalchemy import and_, select, text
 from src.config import JST, BATCH_SIZE, MAX_THREADS_PER_WORKER, MAX_COMPLETED_JOBS_PER_DDOS_ADJUST_INTERVAL, \
     MIN_THREADS_PER_WORKER, DDOS_ADJUST_INTERVAL_MINUTES
@@ -15,7 +15,7 @@ from src.manager_api.base_models import WorkerResumeRequestModel
 from cachetools import TTLCache
 from asyncache import cached
 from src.share.logger import logger
-from src.share.utils import probabilistic_round_to_int
+from src.share.utils import probabilistic_round_to_int, extract_ip_address_hash
 from collections import Counter
 
 router = APIRouter()
@@ -70,15 +70,16 @@ def calculate_threads(total_completed_thread_count: int, limit: int) -> int:
     return MAX_THREADS_PER_WORKER
 
 
-
 @router.get("/api/worker/next_task")
 async def get_next_task(
+    request: Request,
     worker_name: str = Query("default"),
     category: str = Query(...),
     db=Depends(get_async_session)
 ):
     if not worker_name:
         worker_name = "default"  # somehow Query default doesn't work
+    ip_address_hash = extract_ip_address_hash(request)
     # Lock per worker_name and category
     async with locks[(worker_name, category)]:
         if category not in CT_LOG_ENDPOINTS:
@@ -92,6 +93,7 @@ async def get_next_task(
         # exclude_log_names += await get_failed_log_names_by(db, worker_name)
         # exclude_log_names += await get_dead_log_names_by(db, worker_name)
         exclude_log_names += await rate_limit_candidate_log_names(db, worker_name)
+        exclude_log_names += await too_slow_log_names(db, worker_name)
         endpoints = [e for e in endpoints if e[0] not in exclude_log_names]
 
         random.shuffle(endpoints)
@@ -113,13 +115,13 @@ async def get_next_task(
             # logger.info(f"[next_task] end_set for {log_name}: {end_set}")
 
             while i <= max_end:
-                res = await find_next_task(ct_log_url, db, end_set, i, log_name, worker_name, tree_size)
+                res = await find_next_task(ct_log_url, db, end_set, i, log_name, worker_name, tree_size, ip_address_hash)
                 if res:
                     return res
                 i += BATCH_SIZE
             # Returns tasks ending in tree_size if the last task (max_end) is not included in the end_set
             if 0 < i - max_end <= BATCH_SIZE and max_end not in end_set:
-                res = await find_next_task(ct_log_url, db, end_set, max_end, log_name, worker_name, tree_size)
+                res = await find_next_task(ct_log_url, db, end_set, max_end, log_name, worker_name, tree_size, ip_address_hash)
                 if res:
                     return res
         # If all logs are collected, return sleep instruction to worker
@@ -186,7 +188,7 @@ async def get_end_listby_lob_name_with_running_or_completed(db, log_name, min_en
     return end_set
 
 
-async def find_next_task(ct_log_url, db, end_set, i, log_name, worker_name, tree_size):
+async def find_next_task(ct_log_url, db, end_set, i, log_name, worker_name, tree_size, ip_address_hash):
     if i in end_set:
         return None
     else:
@@ -197,7 +199,7 @@ async def find_next_task(ct_log_url, db, end_set, i, log_name, worker_name, tree
 
         # logger.info(f"[next_task] assigning task: log_name={log_name} start={start} end={end}")
 
-        ws = await save_worker_status(ct_log_url, db, end, log_name, start, worker_name)
+        ws = await save_worker_status(ct_log_url, db, end, log_name, start, worker_name, ip_address_hash)
 
         return {
             "log_name": log_name,
@@ -210,7 +212,7 @@ async def find_next_task(ct_log_url, db, end_set, i, log_name, worker_name, tree
         }
 
 
-async def save_worker_status(ct_log_url, db, end, log_name, start, worker_name):
+async def save_worker_status(ct_log_url, db, end, log_name, start, worker_name, ip_address_hash):
     ws = WorkerStatus(
         worker_name=worker_name,
         log_name=log_name,
@@ -220,7 +222,7 @@ async def save_worker_status(ct_log_url, db, end, log_name, start, worker_name):
         current=start,
         status=JobStatus.RUNNING.value,
         last_ping=datetime.now(JST),
-        ip_address=None
+        ip_address=ip_address_hash
     )
     db.add(ws)
     await db.commit()
@@ -293,6 +295,19 @@ async def get_dead_log_names_by(db, worker_name):
     log_names = [row[0] for row in rows]  # ['nimbus2026', 'nimbus2025', 'nimbus2025', 'nimbus2025', 'nimbus2025', 'nimbus2025', 'nimbus2025']
     count = Counter(log_names)  # Counter({'nimbus2025': 6, 'nimbus2026': 1})
     return [log_name for log_name, c in count.items() if c > 10]  # if failed less than n times in the last 30 minutes
+
+
+async def too_slow_log_names(db, worker_name):
+    # そのworker nameで30分以上前のrunning な last_pingを持つlog_nameを取得
+    threshold = datetime.now(JST) - timedelta(minutes=30)
+    stmt = select(WorkerStatus.log_name).where(
+        WorkerStatus.status == JobStatus.RUNNING.value,
+        WorkerStatus.worker_name == worker_name,
+        WorkerStatus.last_ping < threshold
+    )
+    rows = (await db.execute(stmt)).all()
+    log_names = [row[0] for row in rows]  # ['nimbus2026', 'nimbus2025']
+    return log_names
 
 @cached(TTLCache(maxsize=256, ttl=60*10))
 async def rate_limit_candidate_log_names(db, worker_name):

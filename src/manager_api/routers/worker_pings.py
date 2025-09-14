@@ -11,7 +11,7 @@ from datetime import datetime
 from src.share.job_status import JobStatus
 from src.config import WORKER_CTLOG_REQUEST_INTERVAL_SEC, WORKER_PING_INTERVAL_SEC
 from src.manager_api.base_models import WorkerPingModel, WorkerPingBaseModel, WorkerErrorModel
-from src.share.utils import convert_ip_address_hash
+from src.share.utils import extract_ip_address_hash
 
 router = APIRouter()
 
@@ -39,12 +39,6 @@ async def worker_completed(data: WorkerPingBaseModel, request: Request, db=Depen
 @router.post("/api/worker/failed")
 async def worker_failed(data: WorkerPingBaseModel, request: Request, db=Depends(get_async_session)):
     return await update_worker_status_and_summary(data, db, JobStatus.FAILED.value, request)
-
-
-def extract_ip_address_hash(request):
-    if request.client:
-        return convert_ip_address_hash(request.client.host)
-    return "unknown"
 
 
 async def update_worker_status_and_summary(data: WorkerPingModel | WorkerPingBaseModel, db, status_value, request: Request):
