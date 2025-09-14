@@ -20,7 +20,7 @@ router = APIRouter()
 
 
 # ranking of workers by total fetched count and .jp count
-async def get_unsuccessful_rate(db):
+async def get_completed_rate(db):
     threshold = datetime.now(JST) - timedelta(hours=2)
     raw_sql = f"""
     SELECT
@@ -38,13 +38,13 @@ async def get_unsuccessful_rate(db):
     }
     rows = (await db.execute(text(raw_sql), params)).all()
     result = {}
-    for worker_name, unsuccessfull_rate in rows:
-        result[worker_name] = unsuccessfull_rate
+    for worker_name, completed_rate in rows:
+        result[worker_name] = completed_rate
     return result
 
 @router.get("/api/worker_ranking")
 async def get_worker_ranking(db=Depends(get_async_session)):
-    completed_rates = await get_unsuccessful_rate(db)
+    completed_rates = await get_completed_rate(db)
     stmt = select(
         WorkerLogStat.worker_name,
         func.sum(WorkerLogStat.worker_total_count).label('worker_total_count'),
