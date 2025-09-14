@@ -90,6 +90,8 @@ class WorkerStatus(Base):
     last_uploaded_index = Column(BigInteger, default=None)    # Last index where upload succeeded
     status = Column(String(32))  # JobStatus - running, finished, resume_wait, etc
     last_ping = Column(DateTime)
+    created_at = Column(DateTime)  # When the task was created
+    duration_sec = Column(Integer, nullable=True)  # Total duration in seconds (for completed tasks)
     ip_address = Column(String(64), default=None)
     jp_count = Column(BigInteger, default=0)
     jp_ratio = Column(Integer, default=0)

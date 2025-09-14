@@ -213,6 +213,7 @@ async def find_next_task(ct_log_url, db, end_set, i, log_name, worker_name, tree
 
 
 async def save_worker_status(ct_log_url, db, end, log_name, start, worker_name, ip_address_hash):
+    now = datetime.now(JST)
     ws = WorkerStatus(
         worker_name=worker_name,
         log_name=log_name,
@@ -221,7 +222,8 @@ async def save_worker_status(ct_log_url, db, end, log_name, start, worker_name, 
         end=end,
         current=start,
         status=JobStatus.RUNNING.value,
-        last_ping=datetime.now(JST),
+        last_ping=now,
+        created_at=now,
         ip_address=ip_address_hash
     )
     db.add(ws)

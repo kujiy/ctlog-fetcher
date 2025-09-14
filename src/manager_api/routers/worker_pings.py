@@ -54,15 +54,19 @@ async def update_worker_status_and_summary(data: WorkerPingModel | WorkerPingBas
         ).order_by(WorkerStatus.last_ping.desc())
         ws = (await db.execute(ws_stmt)).scalars().first()
         if ws:
+            now = datetime.now(JST)
             ws.worker_name = data.worker_name
             ws.current = data.current
             ws.status = status_value
-            ws.last_ping = datetime.now(JST)
+            ws.last_ping = now
             ws.ip_address = data.ip_address or extract_ip_address_hash(request)
             ws.last_uploaded_index = data.last_uploaded_index
             ws.jp_count = data.jp_count
             ws.jp_ratio = data.jp_ratio
+            if ws.created_at and status_value == JobStatus.COMPLETED.value:
+                ws.duration_sec = (now - ws.created_at.astimezone(JST)).total_seconds()
             await db.commit()
+
             # update the summary table
             stat_stmt = select(WorkerLogStat).where(
                 WorkerLogStat.log_name == ws.log_name,
