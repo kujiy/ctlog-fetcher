@@ -91,7 +91,7 @@
             if (chart) {
                 chart.destroy();
             }
-            
+
             // Chart.js config
             const ctx = document.getElementById('statusChart').getContext('2d');
             chart = new Chart(ctx, {
@@ -182,16 +182,16 @@
                 // Show loading indicator
                 document.getElementById('loadingIndicator').style.display = 'block';
                 document.getElementById('statusChart').style.display = 'none';
-                
+
                 const response = await fetch(`/api/worker_stats/{{ worker_name }}?hours=${hours}&bucket_hours=${bucketHours}`);
                 if (!response.ok) {
                     throw new Error(`API returned status code: ${response.status}`);
                 }
                 const data = await response.json();
-                
+
                 // Extract data from the response
                 const statusStats = data.status_stats;
-                
+
                 // Reset data arrays
                 hourLabels = [];
                 completed = [];
@@ -199,7 +199,7 @@
                 resumeWait = [];
                 dead = [];
                 completedRate = [];
-                
+
                 // Process the data
                 for (const row of statusStats) {
                     hourLabels.push(row.hour_label);
@@ -207,13 +207,13 @@
                     running.push(row.status_counts.running);
                     resumeWait.push(row.status_counts.resume_wait);
                     dead.push(row.status_counts.dead);
-                    
-                    const total = row.status_counts.running + row.status_counts.completed + 
+
+                    const total = row.status_counts.running + row.status_counts.completed +
                                  row.status_counts.resume_wait + row.status_counts.dead;
                     const rate = total > 0 ? (row.status_counts.completed / total * 100).toFixed(2) : 0;
                     completedRate.push(parseFloat(rate));
                 }
-                
+
                 // Reverse arrays for the chart (latest should be rightmost)
                 hourLabels = hourLabels.slice().reverse();
                 completed = completed.slice().reverse();
@@ -221,28 +221,28 @@
                 resumeWait = resumeWait.slice().reverse();
                 dead = dead.slice().reverse();
                 completedRate = completedRate.slice().reverse();
-                
+
                 // Update the chart
                 createChart();
-                
+
                 // Hide loading indicator and show chart
                 document.getElementById('loadingIndicator').style.display = 'none';
                 document.getElementById('statusChart').style.display = 'block';
-                
+
                 // Update the title text
-                const rangeText = hours >= 24 ? 
-                    (hours === 24 ? '24 hours' : 
-                     hours === 72 ? '3 days' : 
-                     hours === 168 ? '7 days' : 
-                     hours === 336 ? '14 days' : 
-                     hours === 720 ? '30 days' : 
-                     hours === 1440 ? '60 days' : `${hours} hours`) : 
+                const rangeText = hours >= 24 ?
+                    (hours === 24 ? '24 hours' :
+                     hours === 72 ? '3 days' :
+                     hours === 168 ? '7 days' :
+                     hours === 336 ? '14 days' :
+                     hours === 720 ? '30 days' :
+                     hours === 1440 ? '60 days' : `${hours} hours`) :
                     `${hours} hours`;
-                
-                const bucketText = bucketHours === 1 ? 'hourly' : 
-                                  bucketHours === 24 ? 'daily' : 
+
+                const bucketText = bucketHours === 1 ? 'hourly' :
+                                  bucketHours === 24 ? 'daily' :
                                   `${bucketHours}-hour buckets`;
-                
+
                 // Update the table with new data if the API provides it
                 if (window.updateTable && typeof window.updateTable === 'function') {
                     window.updateTable(data.status_stats);
@@ -276,6 +276,8 @@
                 <th>Dead</th>
                 <th>Running</th>
                 <th>Resume Wait</th>
+                <th>Duration(Avg)</th>
+                <th>Duration(Max)</th>
                 <th>.jp Count Sum</th>
                 <th>Log Name Job Counts (desc)</th>
             </tr>
@@ -294,6 +296,8 @@
                 <td class="highlight-red">{{ "{:,}".format(row.status_counts.dead) }}</td>
                 <td>{{ "{:,}".format(row.status_counts.running) }}</td>
                 <td>{{ "{:,}".format(row.status_counts.resume_wait) }}</td>
+                <td>{{ row.duration_min.avg }} mins</td>
+                <td>{{ row.duration_min.max }} mins</td>
                 <td>{{ "{:,}".format(row.jp_count_sum) }}</td>
                 <td class="small">
                     {% for log_name, count in row.log_name_counts.items() %}
@@ -309,27 +313,41 @@
     <table>
         <thead>
             <tr>
+                <th>ID</th>
+                <th>Worker Name</th>
                 <th>Log Name</th>
-                <th>Worker Total Count</th>
-                <th>.jp Count</th>
-                <th>.jp Ratio</th>
-                <th>Last Updated</th>
+{#                <th>CT Log URL</th>#}
+                <th>Start</th>
+                <th>End</th>
+                <th>Current</th>
+{#                <th>Last Uploaded Index</th>#}
+                <th>Status</th>
+                <th>Last Ping</th>
+                <th>Created At</th>
+                <th>Duration (sec)</th>
+                <th>IP Address</th>
+                <th>JP Count</th>
+                <th>JP Ratio</th>
             </tr>
         </thead>
         <tbody>
-            {% for stat in log_stats %}
+            {% for stat in worker_status %}
             <tr>
-                <th scope="row"><b>{{ stat.log_name }}</b></th>
-                <td>{{ "{:,}".format(stat.worker_total_count) }}</td>
-                <td>{{ "{:,}".format(stat.jp_count_sum) }}</td>
-                <td>
-                    {% if stat.worker_total_count and stat.worker_total_count > 0 %}
-                        {{ '%.2f' % (stat.jp_count_sum / stat.worker_total_count * 100) }}%
-                    {% else %}
-                        -
-                    {% endif %}
-                </td>
-                <td>{{ stat.last_updated }}</td>
+                <td>{{ stat.id }}</td>
+                <td>{{ stat.worker_name }}</td>
+                <td>{{ stat.log_name }}</td>
+{#                <td>{{ stat.ct_log_url }}</td>#}
+                <td>{{ stat.start }}</td>
+                <td>{{ stat.end }}</td>
+                <td>{{ stat.current }}</td>
+{#                <td>{{ stat.last_uploaded_index }}</td>#}
+                <td>{{ stat.status }}</td>
+                <td>{{ stat.last_ping }}</td>
+                <td>{{ stat.created_at }}</td>
+                <td>{{ stat.duration_sec }}</td>
+                <td>{{ stat.ip_address }}</td>
+                <td>{{ stat.jp_count }}</td>
+                <td>{{ stat.jp_ratio }}</td>
             </tr>
             {% endfor %}
         </tbody>

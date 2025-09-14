@@ -307,7 +307,7 @@ async def worker_stats_page(request: Request, worker_name: str):
     return templates.TemplateResponse("worker_stats.html", {
         "request": request,
         "worker_name": worker_name,
-        "log_stats": stats_data["log_stats"] if stats_data else [],
+        "worker_status": stats_data["worker_status"] if stats_data else [],
         "status_stats": stats_data["status_stats"] if stats_data else [],
         "error_message": error_message
     })

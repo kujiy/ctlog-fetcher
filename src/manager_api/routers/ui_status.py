@@ -108,22 +108,12 @@ async def get_worker_stats(
         bucket_hours: int = 1,
         db=Depends(get_async_session)
 ):
-    # 1. WorkerLogStat: sorted by jp_count_sum desc
-    stat_stmt = select(WorkerLogStat).where(WorkerLogStat.worker_name == worker_name)
-    stat_rows = (await db.execute(stat_stmt)).scalars().all()
-    log_stats = sorted(
-        [
-            {
-                "log_name": s.log_name,
-                "worker_total_count": s.worker_total_count,
-                "jp_count_sum": s.jp_count_sum,
-                "last_updated": s.last_updated.isoformat() if s.last_updated else None,
-            }
-            for s in stat_rows
-        ],
-        key=lambda x: x["worker_total_count"] or 0,
-        reverse=True
-    )
+    # 1. WorkerStatus raw data for two hours
+    stat_stmt = select(WorkerStatus).where(
+        WorkerStatus.worker_name == worker_name,
+        WorkerStatus.last_ping > datetime.now(JST) - timedelta(hours=hours)
+    ).order_by(WorkerStatus.id.desc())
+    worker_status = (await db.execute(stat_stmt)).scalars().all()
 
     # 2. WorkerStatus: past 24 hours, aggregated hourly
     now = datetime.now(JST)
@@ -140,12 +130,17 @@ async def get_worker_stats(
         bucket_start = since + timedelta(hours=i * bucket_hours)
         bucket_end = bucket_start + timedelta(hours=bucket_hours)
         buckets.append({
+            "hour_label": bucket_start.strftime("%Y-%m-%d %H:00"),
             "start": bucket_start,
             "end": bucket_end,
             "status_counts": {},
             "jp_count_sum": 0,
+            "duration_min": {
+                "count": 0,
+                "max": 0,
+                "avg": 0,
+            },
             "log_name_counts": {},
-            "hour_label": bucket_start.strftime("%Y-%m-%d %H:00"),
         })
 
     # calculate each worker status into the buckets
@@ -161,6 +156,13 @@ async def get_worker_stats(
                 bucket["status_counts"][st] = bucket["status_counts"].get(st, 0) + 1
                 # sum of jp_count
                 bucket["jp_count_sum"] += ws.jp_count or 0
+                # duration_min: avg, max
+                if ws.duration_sec:
+                    duration_min = ws.duration_sec / 60
+                    bucket["duration_min"]["count"] += 1
+                    bucket["duration_min"]["avg"] = (bucket["duration_min"]["avg"] + ws.duration_sec / 60) / bucket["duration_min"]["count"]
+                    if duration_min > bucket["duration_min"]["max"]:
+                        bucket["duration_min"]["max"] = duration_min
                 # job count per log_name
                 ln = ws.log_name or "unknown"
                 bucket["log_name_counts"][ln] = bucket["log_name_counts"].get(ln, 0) + 1
@@ -186,11 +188,12 @@ async def get_worker_stats(
             "status_counts": status_counts,
             "jp_count_sum": b["jp_count_sum"],
             "log_name_counts": log_name_counts,
+            "duration_min": b["duration_min"],
         })
 
     return {
         "worker_name": worker_name,
-        "log_stats": log_stats,
+        "worker_status": worker_status,
         "status_stats": status_stats,
     }
 
