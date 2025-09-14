@@ -26,10 +26,9 @@ async def get_worker_ranking(db=Depends(get_async_session)):
         WorkerLogStat.worker_name,
         func.sum(WorkerLogStat.worker_total_count).label('worker_total_count'),
         func.sum(WorkerLogStat.jp_count_sum).label('jp_count_sum')
-    ).group_by(WorkerLogStat.worker_name)
+    ).group_by(WorkerLogStat.worker_name).order_by(text('worker_total_count DESC'))
     rows = (await db.execute(stmt)).all()
     worker_total_count_ranking = []
-    jp_ranking = []
     for r in rows:
         worker_name = f"{get_worker_emoji(r[0])} {r[0]}"
         worker_total_count = r[1]
@@ -41,16 +40,8 @@ async def get_worker_ranking(db=Depends(get_async_session)):
             "jp_count": jp_count,
             "jp_ratio": jp_ratio
         })
-        jp_ranking.append({
-            "worker_name": worker_name,
-            "jp_count": jp_count,
-            "jp_ratio": jp_ratio
-        })
-    worker_total_count_ranking = sorted(worker_total_count_ranking, key=lambda x: x["worker_total_count"], reverse=True)
-    jp_ranking = sorted(jp_ranking, key=lambda x: x["jp_count"], reverse=True)
     return {
         "worker_total_count_ranking": worker_total_count_ranking,
-        "jp_count_ranking": jp_ranking
     }
 
 

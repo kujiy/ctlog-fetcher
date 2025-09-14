@@ -127,20 +127,6 @@
             </tr>
             {% endfor %}
         </table>
-        <table>
-{#            <tr><th colspan="4">.jp Domain Count Ranking</th></tr>#}
-{#            <tr><th>Rank</th><th>Worker Name</th><th>.jp Count</th><th>.jp Ratio</th></tr>#}
-{#            {% for r in worker_ranking.jp_count_ranking %}#}
-{#            <tr>#}
-{#                <td>{{ loop.index }}</td>#}
-{#                <td>{{ r.worker_name }}</td>#}
-{#                <td>#}
-{#                    <a href="/fetched-certs/{{ r.worker_name.split(' ')[-1] }}" style="text-decoration: none; color: #3498db;">{{ "{:,}".format(r.jp_count) }}</a>#}
-{#                </td>#}
-{#                <td>{% if r.committed_index is defined and r.committed_index > 0 %}{{ '%.2f' % (r.jp_ratio * 100) }}%{% elif r.jp_ratio is defined %}{{ '%.2f' % (r.jp_ratio * 100) }}%{% else %}-{% endif %}</td>#}
-{#            </tr>#}
-{#            {% endfor %}#}
-        </table>
         {% else %}
         <p>Could not retrieve ranking information.</p>
         {% endif %}
