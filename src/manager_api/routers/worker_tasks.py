@@ -77,6 +77,8 @@ async def get_next_task(
     category: str = Query(...),
     db=Depends(get_async_session)
 ):
+    if not worker_name:
+        worker_name = "default"  # somehow Query default doesn't work
     # Lock per worker_name and category
     async with locks[(worker_name, category)]:
         if category not in CT_LOG_ENDPOINTS:
