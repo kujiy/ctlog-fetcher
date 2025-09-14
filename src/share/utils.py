@@ -1,4 +1,5 @@
 # python
+import hashlib
 import random
 
 def probabilistic_round_to_int(value) -> int:
@@ -12,3 +13,8 @@ def probabilistic_round_to_int(value) -> int:
         return integer_part + 1
     else:
         return integer_part
+
+# worker.py and manager_api/routers/worker_pings.py
+def convert_ip_address_hash(ip):
+    return hashlib.sha256(ip.encode()).hexdigest()[:7]  # f0f1bcd
+

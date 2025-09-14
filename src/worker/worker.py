@@ -2,6 +2,9 @@
 import glob
 import argparse
 import sys, os
+
+from src.share.utils import convert_ip_address_hash
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 import hashlib
 import time
@@ -1135,12 +1138,14 @@ def validate_worker_name(worker_name):
         return default_worker_name()
     return worker_name
 
+
+
 def get_public_ip_address_hash():
     try:
         resp = requests.get("https://ifconfig.io/ip", timeout=5)
         if resp.status_code == 200:
             ip = resp.text.strip()
-            ip_hash = hashlib.sha256(ip.encode()).hexdigest()[:7]  # f0f1bcd
+            ip_hash = convert_ip_address_hash(ip)
             return ip_hash
         else:
             return "unknown"

@@ -1,7 +1,7 @@
 import logging
 import os
 import json
-from fastapi import Depends, APIRouter
+from fastapi import Depends, APIRouter, Request
 from src.config import JST, BATCH_SIZE
 from src.manager_api.db import get_async_session
 from src.manager_api import locks
@@ -11,6 +11,7 @@ from datetime import datetime
 from src.share.job_status import JobStatus
 from src.config import WORKER_CTLOG_REQUEST_INTERVAL_SEC, WORKER_PING_INTERVAL_SEC
 from src.manager_api.base_models import WorkerPingModel, WorkerPingBaseModel, WorkerErrorModel
+from src.share.utils import convert_ip_address_hash
 
 router = APIRouter()
 
@@ -22,8 +23,8 @@ These query parameters are not processed by the API server at all. They are only
 """
 # ping: only running
 @router.post("/api/worker/ping")
-async def worker_ping(data: WorkerPingModel, db=Depends(get_async_session)):
-    await update_worker_status_and_summary(data, db, JobStatus.RUNNING.value)
+async def worker_ping(data: WorkerPingModel, request: Request, db=Depends(get_async_session)):
+    await update_worker_status_and_summary(data, db, JobStatus.RUNNING.value, request)
     return {
         "ping_interval_sec": WORKER_PING_INTERVAL_SEC,
         "ctlog_request_interval_sec": WORKER_CTLOG_REQUEST_INTERVAL_SEC
@@ -31,17 +32,22 @@ async def worker_ping(data: WorkerPingModel, db=Depends(get_async_session)):
 
 # completed: when a job is completed
 @router.post("/api/worker/completed")
-async def worker_completed(data: WorkerPingBaseModel, db=Depends(get_async_session)):
-    return await update_worker_status_and_summary(data, db, JobStatus.COMPLETED.value)
+async def worker_completed(data: WorkerPingBaseModel, request: Request, db=Depends(get_async_session)):
+    return await update_worker_status_and_summary(data, db, JobStatus.COMPLETED.value, request)
 
 # failed: when a job is failed due to: CT Log API has corrupted data, network error, etc.
 @router.post("/api/worker/failed")
-async def worker_failed(data: WorkerPingBaseModel, db=Depends(get_async_session)):
-    return await update_worker_status_and_summary(data, db, JobStatus.FAILED.value)
+async def worker_failed(data: WorkerPingBaseModel, request: Request, db=Depends(get_async_session)):
+    return await update_worker_status_and_summary(data, db, JobStatus.FAILED.value, request)
 
 
+def extract_ip_address_hash(request):
+    if request.client:
+        return convert_ip_address_hash(request.client.host)
+    return "unknown"
 
-async def update_worker_status_and_summary(data: WorkerPingModel | WorkerPingBaseModel, db, status_value):
+
+async def update_worker_status_and_summary(data: WorkerPingModel | WorkerPingBaseModel, db, status_value, request: Request):
     lock_key = (data.worker_name, data.log_name, data.start, data.end)
     async with locks[lock_key]:
         ws_stmt = select(WorkerStatus).where(
@@ -58,7 +64,7 @@ async def update_worker_status_and_summary(data: WorkerPingModel | WorkerPingBas
             ws.current = data.current
             ws.status = status_value
             ws.last_ping = datetime.now(JST)
-            ws.ip_address = data.ip_address
+            ws.ip_address = data.ip_address or extract_ip_address_hash(request)
             ws.last_uploaded_index = data.last_uploaded_index
             ws.jp_count = data.jp_count
             ws.jp_ratio = data.jp_ratio
