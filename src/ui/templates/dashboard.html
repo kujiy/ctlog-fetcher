@@ -78,14 +78,18 @@
     <div id="worker-ranking">
         {% if worker_ranking %}
         <table>
-            <tr><th colspan="6">Committed Index Ranking</th></tr>
+            <tr>
+                <th colspan="5">Committed Index Ranking</th>
+                <th colspan="2">Last 2 Hours Metrics</th>
+            </tr>
             <tr>
                 <th>Rank</th>
                 <th>Worker Name</th>
                 <th>Fetched Cert Count</th>
                 <th>.jp Count</th>
                 <th>.jp Ratio</th>
-                <th>Completed Rate(Last 2h)</th>
+                <th>Completed Rate</th>
+                <th>Avg. Completed Job Duration</th>
             </tr>
             {% for r in worker_ranking.worker_total_count_ranking %}
             {% set diff = ranking_diff.get(r.worker_name, {}) %}
@@ -127,6 +131,7 @@
                 </td>
                 <td>{% if r.committed_index is defined and r.committed_index > 0 %}{{ '%.2f' % (r.jp_ratio * 100) }}%{% elif r.jp_ratio is defined %}{{ '%.2f' % (r.jp_ratio * 100) }}%{% else %}-{% endif %}</td>
                 <td>{{ r.completed_rate * 100 }} %</td>
+                <td>{{ r.average_min }} mins</td>
             </tr>
             {% endfor %}
         </table>
