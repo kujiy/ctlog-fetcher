@@ -25,16 +25,17 @@ async def get_completed_rate(db):
     raw_sql = f"""
     SELECT
         worker_name,
-        ROUND(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) /
+        ROUND(SUM(CASE WHEN status = :completed THEN 1 ELSE 0 END) /
               COUNT(*), 2) AS completed_rate
     FROM worker_status
     WHERE last_ping > :threshold
-        AND status != :status
+        AND status != :running
     GROUP BY worker_name
     """
     params = {
+        "completed": JobStatus.COMPLETED.value,
         "threshold": threshold,
-        "status": JobStatus.RUNNING.value
+        "running": JobStatus.RUNNING.value
     }
     rows = (await db.execute(text(raw_sql), params)).all()
     result = {}
