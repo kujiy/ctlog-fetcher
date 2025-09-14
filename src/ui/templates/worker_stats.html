@@ -309,7 +309,7 @@
         </tbody>
     </table>
 
-    <h2>2. Worker Log Stats</h2>
+    <h2>2. Worker Stats for Last Two Hours</h2>
     <table>
         <thead>
             <tr>
@@ -332,7 +332,13 @@
         </thead>
         <tbody>
             {% for stat in worker_status %}
-            <tr>
+            <tr
+                {% if stat.status == "completed" %}
+                    class="highlight-green"
+                {% elif stat.status != "running" %}
+                    class="highlight-red"
+                {% endif %}
+            >
                 <td>{{ stat.id }}</td>
                 <td>{{ stat.worker_name }}</td>
                 <td>{{ stat.log_name }}</td>
@@ -341,10 +347,21 @@
                 <td>{{ stat.end }}</td>
                 <td>{{ stat.current }}</td>
 {#                <td>{{ stat.last_uploaded_index }}</td>#}
-                <td>{{ stat.status }}</td>
+                <td>
+                    {{ stat.status }}
+                </td>
                 <td>{{ stat.last_ping }}</td>
                 <td>{{ stat.created_at }}</td>
-                <td>{{ stat.duration_sec }}</td>
+                <!-- less than 30 minutes -->
+                <td
+                    {% if stat.duration_sec and stat.duration_sec < 1800 %}
+                        class="highlight-green"
+                    {% elif stat.duration_sec %}
+                        class="highlight-red"
+                    {% endif %}
+                >
+                    {% if stat.duration_sec %}{{ stat.duration_sec }}{% endif %}
+                </td>
                 <td>{{ stat.ip_address }}</td>
                 <td>{{ stat.jp_count }}</td>
                 <td>{{ stat.jp_ratio }}</td>

@@ -111,7 +111,7 @@ async def get_worker_stats(
     # 1. WorkerStatus raw data for two hours
     stat_stmt = select(WorkerStatus).where(
         WorkerStatus.worker_name == worker_name,
-        WorkerStatus.last_ping > datetime.now(JST) - timedelta(hours=hours)
+        WorkerStatus.last_ping > datetime.now(JST) - timedelta(hours=2)
     ).order_by(WorkerStatus.id.desc())
     worker_status = (await db.execute(stat_stmt)).scalars().all()
 
@@ -158,9 +158,9 @@ async def get_worker_stats(
                 bucket["jp_count_sum"] += ws.jp_count or 0
                 # duration_min: avg, max
                 if ws.duration_sec:
-                    duration_min = ws.duration_sec / 60
+                    duration_min = round(ws.duration_sec / 60, 2)
                     bucket["duration_min"]["count"] += 1
-                    bucket["duration_min"]["avg"] = (bucket["duration_min"]["avg"] + ws.duration_sec / 60) / bucket["duration_min"]["count"]
+                    bucket["duration_min"]["avg"] = round((bucket["duration_min"]["avg"] + ws.duration_sec / 60) / bucket["duration_min"]["count"], 2)
                     if duration_min > bucket["duration_min"]["max"]:
                         bucket["duration_min"]["max"] = duration_min
                 # job count per log_name
