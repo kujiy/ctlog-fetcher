@@ -56,7 +56,12 @@ async def get_worker_ranking(db=Depends(get_async_session)):
 
 # --- get_tree_size with 1-minute cache ---
 @router.get("/api/worker_stats/{worker_name}")
-async def get_worker_stats(worker_name: str, db=Depends(get_async_session)):
+async def get_worker_stats(
+        worker_name: str,
+        hours: int = 24,
+        bucket_hours: int = 1,
+        db=Depends(get_async_session)
+):
     # 1. WorkerLogStat: sorted by jp_count_sum desc
     stat_stmt = select(WorkerLogStat).where(WorkerLogStat.worker_name == worker_name)
     stat_rows = (await db.execute(stat_stmt)).scalars().all()
@@ -76,7 +81,7 @@ async def get_worker_stats(worker_name: str, db=Depends(get_async_session)):
 
     # 2. WorkerStatus: past 24 hours, aggregated hourly
     now = datetime.now(JST)
-    since = now - timedelta(hours=24)
+    since = now - timedelta(hours=hours)
     status_stmt = select(WorkerStatus).where(
         WorkerStatus.worker_name == worker_name,
         WorkerStatus.last_ping >= since
@@ -85,9 +90,9 @@ async def get_worker_stats(worker_name: str, db=Depends(get_async_session)):
 
     # a bucket for 24 hours, each 1 hour
     buckets = []
-    for i in range(24):
-        bucket_start = since + timedelta(hours=i)
-        bucket_end = bucket_start + timedelta(hours=1)
+    for i in range(int(hours / bucket_hours)):
+        bucket_start = since + timedelta(hours=i * bucket_hours)
+        bucket_end = bucket_start + timedelta(hours=bucket_hours)
         buckets.append({
             "start": bucket_start,
             "end": bucket_end,
@@ -128,7 +133,7 @@ async def get_worker_stats(worker_name: str, db=Depends(get_async_session)):
         log_name_counts = dict(sorted(b["log_name_counts"].items(), key=lambda x: x[1], reverse=True))
         # hour_label: "YYYY-MM-DD HH:00 - HH:00"
         start_hour = b["start"].strftime("%Y-%m-%d %H:00")
-        end_hour = (b["end"]).strftime("%H:00")
+        end_hour = (b["end"]).strftime("%Y-%m-%d %H:00")
         hour_label = f"{start_hour} - {end_hour}"
         status_stats.append({
             "hour_label": hour_label,

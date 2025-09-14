@@ -312,14 +312,22 @@ async def worker_stats_page(request: Request, worker_name: str):
         "error_message": error_message
     })
 
+# API endpoint to get worker stats data for different time ranges
+@app.get("/api/worker_stats/{worker_name}")
+async def api_worker_stats(request: Request, worker_name: str, hours: int = 24, bucket_hours: int = 1):
+    stats_data, error_message = await get_worker_stats(worker_name, hours, bucket_hours)
+    if error_message:
+        return {"error": error_message}
+    return stats_data
+
 
 @cached(TTLCache(maxsize=128, ttl=300))
-async def get_worker_stats(worker_name):
+async def get_worker_stats(worker_name, hours=24, bucket_hours=1):
     stats_data = None
     error_message = None
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/worker_stats/{worker_name}")
+            response = await client.get(f"{MANAGER_API_URL_FOR_UI}/api/worker_stats/{worker_name}?hours={hours}&bucket_hours={bucket_hours}")
             if response.status_code == 200:
                 stats_data = response.json()
             else:
