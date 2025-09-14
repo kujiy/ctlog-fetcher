@@ -18,6 +18,16 @@ router = APIRouter()
 
 
 # --- Overall Progress API ---
+async def count_ip_address(db):
+    # SELECT distinct(ip_address) FROM ct.worker_status where last_ping > JST two hours ago
+    stmt = select(func.count(func.distinct(WorkerStatus.ip_address))).where(
+        WorkerStatus.last_ping >= datetime.now(JST) - timedelta(hours=2)
+    )
+    result = await db.execute(stmt)
+    count = result.scalar()
+    return count if count is not None else 0
+
+
 @router.get("/api/logs_summary")
 async def get_logs_summary(db=Depends(get_async_session)):
     # Get sum from LogFetchProgress table using ORM-style result access
@@ -45,13 +55,14 @@ async def get_logs_summary(db=Depends(get_async_session)):
 
     # --- Unique .jp count ---
     unique_jp_count = await get_unique_cert_counter_count()
-
+    ip_address_count = await count_ip_address(db)
     return {
         "total_tree_size": total_tree_size,
         "fetched_tree_size": fetched_tree_size,
         "fetched_rate": fetched_rate,
         "eta_days": eta_days,
         "unique_jp_count": unique_jp_count,
+        "ip_address_count": ip_address_count,
     }
 
 
