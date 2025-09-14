@@ -46,20 +46,22 @@ async def get_worker_categories(
     # """
     # if "digicert" in ordered_categories and random.randint(1, 3):
     #     ordered_categories.remove("digicert")
-    ordered_categories = await ddos_adjuster(db, ordered_categories)
+
+    ## we had too many dead workers by this unstable ordered_categories adjustment, so we disable it for now.
+    # ordered_categories = await ddos_adjuster(db, ordered_categories)
 
     return {
         "all_categories": all_categories,
         "ordered_categories": ordered_categories
     }
-
-# DDoS adjuster: limit number of categories according to number of running workers
-async def ddos_adjuster(db, ordered_categories):
-    total_completed_thread_count = await get_completed_thread_count_last_min(db, DDOS_ADJUST_INTERVAL_MINUTES)   # 100
-    max_cat_count = calculate_threads(total_completed_thread_count, MAX_COMPLETED_JOBS_PER_DDOS_ADJUST_INTERVAL)
-    # reduce len(ordered_categories) according to threads
-    ordered_categories = ordered_categories[:max_cat_count - 1]
-    return ordered_categories
+#
+# # DDoS adjuster: limit number of categories according to number of running workers
+# async def ddos_adjuster(db, ordered_categories):
+#     total_completed_thread_count = await get_completed_thread_count_last_min(db, DDOS_ADJUST_INTERVAL_MINUTES)   # 100
+#     max_cat_count = calculate_threads(total_completed_thread_count, MAX_COMPLETED_JOBS_PER_DDOS_ADJUST_INTERVAL)
+#     # reduce len(ordered_categories) according to threads
+#     ordered_categories = ordered_categories[:max_cat_count - 1]
+#     return ordered_categories
 
 
 def calculate_threads(total_completed_thread_count: int, limit: int) -> int:
@@ -84,9 +86,10 @@ async def get_next_task(
 
         # Exclude log_name of completed past CT Logs or current CT Logs that have almost been retrieved
         exclude_log_names = await get_almost_completed_log_names(db, category)
-        # Exclude log_name that the worker has failed or dead recently(rate limit avoidance)
-        exclude_log_names += await get_failed_log_names_by(db, worker_name)
-        exclude_log_names += await get_dead_log_names_by(db, worker_name)
+        ## Exclude log_name that the worker has failed or dead recently(rate limit avoidance)
+        # exclude_log_names += await get_failed_log_names_by(db, worker_name)
+        # exclude_log_names += await get_dead_log_names_by(db, worker_name)
+        exclude_log_names += await rate_limit_candidate_log_names(db, worker_name)
         endpoints = [e for e in endpoints if e[0] not in exclude_log_names]
 
         random.shuffle(endpoints)
@@ -288,3 +291,49 @@ async def get_dead_log_names_by(db, worker_name):
     log_names = [row[0] for row in rows]  # ['nimbus2026', 'nimbus2025', 'nimbus2025', 'nimbus2025', 'nimbus2025', 'nimbus2025', 'nimbus2025']
     count = Counter(log_names)  # Counter({'nimbus2025': 6, 'nimbus2026': 1})
     return [log_name for log_name, c in count.items() if c > 10]  # if failed less than n times in the last 30 minutes
+
+@cached(TTLCache(maxsize=256, ttl=60*10))
+async def rate_limit_candidate_log_names(db, worker_name):
+    """
+    Return log_names that have high unsuccessful rate (dead + failed rate > 0.1)
+    with 80% probability for each log to be included in the result.
+    
+    This helps avoid rate limiting by spreading the load and avoiding problematic logs.
+    
+    Uses raw SQL for better performance compared to multiple subqueries.
+    """
+    # 24 hours ago
+    threshold = datetime.now(JST) - timedelta(hours=24)
+    threshold_str = threshold.strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Use raw SQL for better performance
+    raw_sql = """
+    SELECT
+        log_name,
+        ROUND((SUM(CASE WHEN status = 'dead' THEN 1 ELSE 0 END) + 
+               SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END)) / 
+              COUNT(*) * 1.0, 2) AS unsuccessful_rate
+    FROM worker_status
+    WHERE last_ping > :threshold
+        AND status != :running_status
+        AND worker_name = :worker_name
+    GROUP BY worker_name, log_name
+    """
+    
+    params = {
+        "threshold": threshold_str,
+        "running_status": JobStatus.RUNNING.value,
+        "worker_name": worker_name
+    }
+    
+    rows = (await db.execute(raw_sql, params)).all()
+    
+    # Filter logs with unsuccessful_rate > 0.1 and include with 80% probability
+    rate_limited_logs = []
+    for row in rows:
+        log_name, unsuccessful_rate = row
+        # Include logs with unsuccessful_rate > 0.1 with 80% probability
+        if unsuccessful_rate > 0.1 and random.random() < 0.8:
+            rate_limited_logs.append(log_name)
+    
+    return rate_limited_logs

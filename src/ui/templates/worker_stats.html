@@ -151,10 +151,11 @@
                 <th>Hour (JST)</th>
                 <th>Total Jobs</th>
                 <th>Completed Rate</th>
+                <th>Dead Rate</th>
                 <th>Completed</th>
+                <th>Dead</th>
                 <th>Running</th>
                 <th>Resume Wait</th>
-                <th>Dead</th>
                 <th>.jp Count Sum</th>
                 <th>Log Name Job Counts (desc)</th>
             </tr>
@@ -163,14 +164,16 @@
             {% for row in status_stats %}
             {% set total_jobs = row.status_counts.running + row.status_counts.completed + row.status_counts.resume_wait + row.status_counts.dead %}
             {% set completed_rate = (row.status_counts.completed / total_jobs * 100) if total_jobs > 0 else 0 %}
+            {% set dead_rate = (row.status_counts.dead / total_jobs * 100) if total_jobs > 0 else 0 %}
             <tr>
                 <th scope="row"><b>{{ row.hour_label }}</b></th>
                 <td>{{ "{:,}".format(total_jobs) }}</td>
                 <td>{{ '%.2f' % completed_rate }}%</td>
+                <td>{{ '%.2f' % dead_rate }}%</td>
                 <td class="highlight-green">{{ "{:,}".format(row.status_counts.completed) }}</td>
+                <td class="highlight-red">{{ "{:,}".format(row.status_counts.dead) }}</td>
                 <td>{{ "{:,}".format(row.status_counts.running) }}</td>
                 <td>{{ "{:,}".format(row.status_counts.resume_wait) }}</td>
-                <td class="highlight-red">{{ "{:,}".format(row.status_counts.dead) }}</td>
                 <td>{{ "{:,}".format(row.jp_count_sum) }}</td>
                 <td class="small">
                     {% for log_name, count in row.log_name_counts.items() %}
