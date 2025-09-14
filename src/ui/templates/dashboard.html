@@ -131,7 +131,7 @@
                 </td>
                 <td>{% if r.committed_index is defined and r.committed_index > 0 %}{{ '%.2f' % (r.jp_ratio * 100) }}%{% elif r.jp_ratio is defined %}{{ '%.2f' % (r.jp_ratio * 100) }}%{% else %}-{% endif %}</td>
                 <td>{{ r.completed_rate * 100 }} %</td>
-                <td>{{ r.average_min }} mins</td>
+                <td>{% if r.average_min %}{{ r.average_min }} mins{% endif %}</td>
             </tr>
             {% endfor %}
         </table>
