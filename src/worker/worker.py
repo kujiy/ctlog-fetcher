@@ -1048,11 +1048,15 @@ def wait_for_manager_api_ready(manager_url):
 
 
 def is_dns_active(parsed):
+    """
+    Check if DNS is active for the given parsed URL.
+    Returns True if DNS resolution succeeds, False otherwise.
+    """
     try:
         # DNS resolution
         socket.gethostbyname(parsed.hostname)
         return True
-    except Exception as e:
+    except Exception:
         return False
 
 
