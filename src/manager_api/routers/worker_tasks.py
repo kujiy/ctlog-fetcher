@@ -80,6 +80,9 @@ async def get_next_task(
     if not worker_name:
         worker_name = "default"  # somehow Query default doesn't work
     ip_address_hash = extract_ip_address_hash(request)
+    if category == "googledigicert":  # somehow some workers request with this invalid category
+        category = "google"
+
     # Lock per worker_name and category
     async with locks[(worker_name, category)]:
         if category not in CT_LOG_ENDPOINTS:
