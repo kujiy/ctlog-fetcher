@@ -148,12 +148,11 @@ async def get_worker_stats(
         last_ping = ws.last_ping
         # Add JST if last_ping is offset-naive
         if last_ping is not None and last_ping.tzinfo is None:
-            last_ping = last_ping.replace(tzinfo=JST)
+            last_ping = last_ping.astimezone(JST)
         for bucket in buckets:
             if last_ping is not None and bucket["start"] <= last_ping < bucket["end"]:
                 # jobs status count
-                st = ws.status or "unknown"
-                bucket["status_counts"][st] = bucket["status_counts"].get(st, 0) + 1
+                bucket["status_counts"][ws.status] = bucket["status_counts"].get(ws.status, 0) + 1
                 # sum of jp_count
                 bucket["jp_count_sum"] += ws.jp_count or 0
                 # duration_min: avg, max
@@ -164,8 +163,7 @@ async def get_worker_stats(
                     if duration_min > bucket["duration_min"]["max"]:
                         bucket["duration_min"]["max"] = duration_min
                 # job count per log_name
-                ln = ws.log_name or "unknown"
-                bucket["log_name_counts"][ln] = bucket["log_name_counts"].get(ln, 0) + 1
+                bucket["log_name_counts"][ws.log_name] = bucket["log_name_counts"].get(ws.log_name, 0) + 1
                 break
 
     # order by most recent hour first
