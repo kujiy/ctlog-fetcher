@@ -304,11 +304,32 @@ async def _fetched_certs_by_worker_name(worker_name):
 @app.get("/worker-stats/{worker_name}", response_class=HTMLResponse)
 async def worker_stats_page(request: Request, worker_name: str):
     stats_data, error_message = await get_worker_stats(worker_name)
+    from datetime import datetime
+
+    # worker_status はリスト（またはクエリ結果）
+    longest_running = None
+    longest_created_at = None
+
+    for stat in stats_data["worker_status"]:
+        if stat["status"] == "running" and stat["created_at"]:
+            created_at_dt = datetime.fromisoformat(stat["created_at"]).astimezone(JST)
+            if not longest_created_at or created_at_dt < longest_created_at:
+                longest_running = stat
+                longest_created_at = created_at_dt
+
+    # how long the longest job has been running (in minutes)
+    longest_duration_min = None
+    if longest_running:
+        longest_duration_min = int((datetime.now(JST) - longest_created_at).total_seconds() // 60)
+
+
     return templates.TemplateResponse("worker_stats.html", {
         "request": request,
         "worker_name": worker_name,
         "worker_status": stats_data["worker_status"] if stats_data else [],
         "status_stats": stats_data["status_stats"] if stats_data else [],
+        "longest_running": longest_running,
+        "longest_duration_min": longest_duration_min,
         "error_message": error_message
     })
 

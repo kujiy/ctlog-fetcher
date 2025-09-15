@@ -274,6 +274,8 @@
                 <th>Dead Rate</th>
                 <th>Completed</th>
                 <th>Dead</th>
+                <th>Failed</th>
+                <th>Skipped</th>
                 <th>Running</th>
                 <th>Resume Wait</th>
                 <th>Duration(Avg)</th>
@@ -293,7 +295,15 @@
                 <td>{{ '%.2f' % completed_rate }}%</td>
                 <td>{{ '%.2f' % dead_rate }}%</td>
                 <td class="highlight-green">{{ "{:,}".format(row.status_counts.completed) }}</td>
-                <td class="highlight-red">{{ "{:,}".format(row.status_counts.dead) }}</td>
+                {% if row.status_counts.dead %}
+                    <td class="highlight-red">{{ row.status_counts.dead }}</td>
+                    <td class="highlight-red">{{ row.status_counts.failed }}</td>
+                    <td class="highlight-red">{{ row.status_counts.skipped }}</td>
+                {% else %}
+                    <td>{{ row.status_counts.dead }}</td>
+                    <td>{{ row.status_counts.failed }}</td>
+                    <td>{{ row.status_counts.skipped }}</td>
+                {% endif %}
                 <td>{{ "{:,}".format(row.status_counts.running) }}</td>
                 <td>{{ "{:,}".format(row.status_counts.resume_wait) }}</td>
                 <td>{{ row.duration_min.avg }} mins</td>
@@ -309,7 +319,22 @@
         </tbody>
     </table>
 
+    <br>
+    <hr>
     <h2>2. Worker Status for Last Two Hours</h2>
+
+    {% if longest_running %}
+    <div style="margin:1em 0;padding:0.5em;background:#f4f4f4;border-radius:4px;">
+        <b>Longest Job:</b><br>
+        <b>ID:</b> {{ longest_running.id }}<br>
+        <b>Created At:</b> {{ longest_running.created_at }}<br>
+        <b>Last Ping:</b> {{ longest_running.last_ping }}<br>
+        <b>Status:</b> {{ longest_running.status }}<br>
+        <b>Log Name:</b> {{ longest_running.log_name }} start={{ longest_running.start }} end={{ longest_running.end }} current={{ longest_running.current }} remaining={{ longest_running.end - longest_running.current }}<br>
+        <b>IP Address:</b> {{ longest_running.ip_address }}<br>
+    </div>
+    {% endif %}
+
     <table>
         <thead>
             <tr>
