@@ -6,7 +6,7 @@ from src.config import JST, BATCH_SIZE, MAX_THREADS_PER_WORKER, MAX_COMPLETED_JO
     MIN_THREADS_PER_WORKER, DDOS_ADJUST_INTERVAL_MINUTES
 from src.manager_api.db import get_async_session
 from src.manager_api import locks
-from src.manager_api.db_query import get_completed_thread_count_last_min
+from src.manager_api.db_query import get_completed_thread_count_last_min, too_slow_log_names
 from src.manager_api.models import CTLogSTH, WorkerStatus, LogFetchProgress
 from src.config import CT_LOG_ENDPOINTS, LOG_FETCH_PROGRESS_TTL, \
     WORKER_CTLOG_REQUEST_INTERVAL_SEC, ORDERED_CATEGORIES, STH_FETCH_INTERVAL_SEC
@@ -302,18 +302,6 @@ async def get_dead_log_names_by(db, worker_name):
     return [log_name for log_name, c in count.items() if c > 10]  # if failed less than n times in the last 30 minutes
 
 
-async def too_slow_log_names(db, ip_address_hash):
-    # Rate limit avoidance: if there are many workers from the same IP, exclude logs that have been running for more than 30 minutes
-    # Retrieve the log_name with a running last_ping older than 30 minutes for that ip_address_hash
-    threshold = datetime.now(JST) - timedelta(minutes=30)
-    stmt = select(WorkerStatus.log_name).where(
-        WorkerStatus.status == JobStatus.RUNNING.value,
-        WorkerStatus.ip_address == ip_address_hash,
-        WorkerStatus.created_at < threshold
-    )
-    rows = (await db.execute(stmt)).all()
-    log_names = [row[0] for row in rows]  # ['nimbus2026', 'nimbus2025']
-    return log_names
 
 @cached(TTLCache(maxsize=256, ttl=60*10))
 async def rate_limit_candidate_log_names(db, worker_name):

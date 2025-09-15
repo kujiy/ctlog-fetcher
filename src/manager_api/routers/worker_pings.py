@@ -1,10 +1,13 @@
 import logging
 import os
 import json
+from random import randint
+
 from fastapi import Depends, APIRouter, Request
 from src.config import JST, BATCH_SIZE
 from src.manager_api.db import get_async_session
 from src.manager_api import locks
+from src.manager_api.db_query import too_slow_duration_by_log_name
 from src.manager_api.models import WorkerLogStat, WorkerStatus
 from sqlalchemy import select
 from datetime import datetime
@@ -22,12 +25,21 @@ a worker has failed_files and pending_files as query parameters.
 These query parameters are not processed by the API server at all. They are only for access log purposes.
 """
 # ping: only running
+async def get_ctlog_request_interval_sec(db, log_name, ip_address_hash: str) -> int:
+    ws: WorkerStatus = await too_slow_duration_by_log_name(db, log_name, ip_address_hash)
+    if ws:
+        duration_min = ((datetime.now(JST) - ws.created_at.astimezone(JST)).total_seconds()) / 60 / 10
+        tmp = min(WORKER_CTLOG_REQUEST_INTERVAL_SEC * 7, duration_min)  # if the job is taking 40 mins, wait 4 secs
+        return randint(3, int(tmp))
+    return WORKER_CTLOG_REQUEST_INTERVAL_SEC
+
+
 @router.post("/api/worker/ping")
 async def worker_ping(data: WorkerPingModel, request: Request, db=Depends(get_async_session)):
-    await update_worker_status_and_summary(data, db, JobStatus.RUNNING.value, request)
+    # await update_worker_status_and_summary(data, db, JobStatus.RUNNING.value, request)
     return {
         "ping_interval_sec": WORKER_PING_INTERVAL_SEC,
-        "ctlog_request_interval_sec": WORKER_CTLOG_REQUEST_INTERVAL_SEC
+        "ctlog_request_interval_sec": await get_ctlog_request_interval_sec(db, data.log_name, extract_ip_address_hash(request))
     }
 
 # completed: when a job is completed

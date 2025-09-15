@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 from cachetools import TTLCache
 from src.share.job_status import JobStatus
 from asyncache import cached
@@ -75,4 +77,36 @@ async def worker_status_range_total_count(end, session, start):
     )
     count = (await session.execute(stmt)).scalar()
     return count
+
+
+
+# next_task
+async def too_slow_log_names(db, ip_address_hash):
+    # Rate limit avoidance: if there are many workers from the same IP, exclude logs that have been running for more than 30 minutes
+    # Retrieve the log_name with a running last_ping older than 30 minutes for that ip_address_hash
+    threshold = datetime.now(JST) - timedelta(minutes=30)
+    stmt = select(WorkerStatus.log_name).where(
+        WorkerStatus.status == JobStatus.RUNNING.value,
+        WorkerStatus.ip_address == ip_address_hash,
+        WorkerStatus.created_at < threshold
+    )
+    rows = (await db.execute(stmt)).all()
+    log_names = [row[0] for row in rows]  # ['nimbus2026', 'nimbus2025']
+    return log_names
+
+# ping
+async def too_slow_duration_by_log_name(db, log_name, ip_address_hash) -> WorkerStatus:
+    # ip_address_hash = "f8f1bcb"
+    # Rate limit avoidance: if there are many workers from the same IP, exclude logs that have been running for more than 30 minutes
+    threshold = datetime.now(JST) - timedelta(minutes=30)
+    stmt = select(WorkerStatus).where(
+        WorkerStatus.status == JobStatus.RUNNING.value,
+        WorkerStatus.ip_address == ip_address_hash,
+        WorkerStatus.log_name == log_name,
+        # Exclude almost resume_wait jobs
+        WorkerStatus.created_at < threshold,  # taking too much time
+        WorkerStatus.last_ping > threshold,   # even the last ping is recent
+    ).order_by(WorkerStatus.created_at).limit(1)
+    rows = (await db.execute(stmt)).first()
+    return rows[0] if rows else None
 
