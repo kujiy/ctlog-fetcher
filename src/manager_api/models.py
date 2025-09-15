@@ -93,6 +93,8 @@ class WorkerStatus(Base):
     created_at = Column(DateTime)  # When the task was created
     duration_sec = Column(Integer, nullable=True)  # Total duration in seconds (for completed tasks)
     ip_address = Column(String(64), default=None)
+    total_retries = Column(Integer, default=0)
+    max_retry_after = Column(Integer, default=0)  # Rate limiting wait time in seconds
     jp_count = Column(BigInteger, default=0)
     jp_ratio = Column(Integer, default=0)
 

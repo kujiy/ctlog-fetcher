@@ -58,7 +58,7 @@ def register_stop_event(event=None):
 class NeedTreeSizeException(Exception):
     pass
 
-def fetch_ct_log(ct_log_url, start, end, proxies=None):
+def fetch_ct_log(ct_log_url, start, end, proxies=None, retry_stats=None, stop_event=None):
     # Google CT log API: /ct/v1/get-entries?start={start}&end={end}
     base_url = ct_log_url.rstrip('/')
     url = f"{base_url}/ct/v1/get-entries?start={start}&end={end}"
@@ -70,28 +70,32 @@ def fetch_ct_log(ct_log_url, start, end, proxies=None):
         else:
             use_proxies = proxies
         resp = requests.get(url, proxies=use_proxies, timeout=10)
-        logger.debug(f"Response body: {resp.text[:200]}")
+        # logger.debug(f"Response body: {resp.text[:200]}")
         if resp.status_code == 200:
             return resp.json().get('entries', [])
         elif resp.status_code == 429:
             retry_after = resp.headers.get('Retry-After')
-            logger.debug(f"[WARN] CT log rate limited (429): {retry_after} seconds. url={url}")
+            logger.debug(f"[CtLogFetch] [WARN] CT log rate limited (429): {retry_after} seconds. url={url}")
             try:
                 wait_sec = int(retry_after) if retry_after else 5
+                # Update retry stats if provided
+                if retry_stats is not None:
+                    retry_stats['total_retries'] += 1
+                    retry_stats['max_retry_after'] = max(retry_stats['max_retry_after'], wait_sec)
             except Exception:
                 wait_sec = 5
-            logger.debug(f"CT log rate limited (429): waiting {wait_sec}s. url={url}")
-            sleep_with_stop_check(wait_sec, my_stop_event)
+            logger.debug(f"[CtLogFetch] CT log rate limited (429): waiting {wait_sec}s. url={url}")
+            sleep_with_stop_check(wait_sec, stop_event)
             return []
         elif resp.status_code == 400 and "need tree size":
-            logger.debug(f"NeedTreeSizeException: {resp.text} url={url}")
+            logger.debug(f"[CtLogFetch] NeedTreeSizeException: {resp.text} url={url}")
             raise NeedTreeSizeException(resp.text)
         else:
-            logger.debug(f"Failed to fetch CT log: {resp.status_code} url={url}")
-            sleep_with_stop_check(5, my_stop_event)
+            logger.debug(f"[CtLogFetch] Failed to fetch CT log: {resp.status_code} url={url}")
+            sleep_with_stop_check(5, stop_event)
             return []
     except Exception as e:
-        logger.debug(f"fetch_ct_log exception: [{type(e).__name__}] {e} url={url}")
+        logger.debug(f"[CtLogFetch] fetch_ct_log exception: [{type(e).__name__}] {e} url={url}")
         if isinstance(e, NeedTreeSizeException):
             raise
         return []
@@ -114,7 +118,7 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
     task["ct_log_url"] = ct_log_url
     task["start"] = task.get('start')
     task["end"] = end
-    task["ip_address"] = args.ip_address
+    # task["ip_address"] = args.ip_address
     task["status"] = JobStatus.RUNNING.value
     jobkey = f"{category}_{log_name}_{current}_{end}"
     global_tasks[jobkey] = task
@@ -128,6 +132,12 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
     worker_jp_count = 0
     worker_total_count = 0
 
+    # Add retry statistics tracking
+    retry_stats = {
+        'total_retries': 0,
+        'max_retry_after': 0
+    }
+
     need_tree_size = False
 
     my_stop_event = get_stop_event()
@@ -136,7 +146,7 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
         jp_certs_buffer = []
         ping_interval_sec = 60
         while current <= end and not my_stop_event.is_set():
-            logger.debug(f"[DEBUG] Loop: category={category} log_name={log_name} current={current} end={end}")
+            # logger.debug(f"[DEBUG] Loop: category={category} log_name={log_name} current={current} end={end}")
             omikuji = random.choice(omikuji_list)
             with failed_lock:
                 retry_count = len(failed_uploads)
@@ -150,7 +160,7 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
 
             try:
                 # Fetch a CT LOG API: always request up to end, but only process as many as returned
-                entries = fetch_ct_log(ct_log_url, current, end, proxies)
+                entries = fetch_ct_log(ct_log_url, current, end, proxies, retry_stats, my_stop_event)
             except NeedTreeSizeException as e:
                 logger.info(f"[{category}] NeedTreeSizeException caught: {e}. Completing job.")
                 need_tree_size = True
@@ -158,12 +168,13 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
 
             req_count += 1
             actual_entry_size = len(entries)
-            logger.debug(f"[DEBUG] Fetched entries: {actual_entry_size} (current={current})")
+            # logger.debug(f"[DEBUG] Fetched entries: {actual_entry_size} (current={current})")
 
             if empty_entries_count > 10:  # 1 + 2 + 4 + 8 + 16 + 32 + 60 + 60 + 60 + 60 = 303 seconds max wait(5 min)
                 logger.warning(f"[WARN] Entries were empty 10 times in a row: category={category} log_name={log_name} current={current} end={end}")
                 send_failed(args, log_name, ct_log_url, task, end, current,
-                            last_uploaded_index, worker_jp_count, worker_total_count, my_ip)
+                            last_uploaded_index, worker_jp_count, worker_total_count, my_ip,
+                            retry_stats['max_retry_after'], retry_stats['total_retries'])
                 break
             if not entries:
                 empty_entries_count += 1
@@ -179,30 +190,24 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
                 logger.debug(f"[DEBUG] Stop event detected before processing for {category}")
                 break
 
-            # Parsing
-            jp_certs = extract_jp_certs(entries, log_name, ct_log_url, args, my_ip, current)
-            if jp_certs:
-                worker_jp_count += len(jp_certs)  # Add the number of found jp_certs before deduplication as a reward for the worker
-                jp_certs_buffer.extend(jp_certs)
-                before = len(jp_certs_buffer)
-                # Remove duplicates
-                jp_certs_buffer = filter_jp_certs_unique(jp_certs_buffer)
-                after = len(jp_certs_buffer)
-                logger.debug(f"[DEBUG] JP certs buffer: before={before} after={after} added={len(jp_certs)} total_jp_count={worker_jp_count}")
-
-            # upload if buffer is large enough
-            if len(jp_certs_buffer) >= 32:
-                last_uploaded_index = upload_jp_certs(args, category, current, jp_certs_buffer, failed_lock)
-                jp_certs_buffer = []
+            # upload
+            jp_certs_buffer, last_uploaded_index, worker_jp_count = upload(args, category, ct_log_url, current, entries,
+                                                                           failed_lock, jp_certs_buffer,
+                                                                           last_uploaded_index, log_name, my_ip,
+                                                                           worker_jp_count)
 
             worker_total_count += actual_entry_size
+
+            # Ping
             last_ping_time, ping_interval_sec, ctlog_request_interval_sec = send_ping(
                 args, category, log_name, ct_log_url, task, end, current, last_uploaded_index,
-                worker_jp_count, worker_total_count, my_ip, last_ping_time, status="running", default_ping_seconds=ping_interval_sec, default_ctlog_request_interval_sec=ctlog_request_interval_sec
+                worker_jp_count, worker_total_count, my_ip, last_ping_time, status="running",
+                default_ping_seconds=ping_interval_sec, default_ctlog_request_interval_sec=ctlog_request_interval_sec,
+                max_retry_after=retry_stats['max_retry_after'], total_retries=retry_stats['total_retries']
             )
 
             # Use sleep_with_stop_check instead of time.sleep
-            logger.debug(f"ctlog_request_interval_sec: {ctlog_request_interval_sec}")
+            # logger.debug(f"ctlog_request_interval_sec: {ctlog_request_interval_sec}")
             sleep_with_stop_check(ctlog_request_interval_sec, my_stop_event)
 
             # if the entry is empty, it may loop infinitely, but it will break with empty_entries_count, so it's okay
@@ -236,7 +241,8 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
         console_msg = "✅ Completed!"
         task["status"] = JobStatus.COMPLETED.value
         global_tasks[jobkey]["status"] = JobStatus.COMPLETED.value
-        send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, my_ip)
+        send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, my_ip,
+                      retry_stats['max_retry_after'], retry_stats['total_retries'])
         expect_total_count = end - task.get('start', 0) + 1
         fetched_rate = worker_total_count / expect_total_count
         status_lines[status_key] = (
@@ -255,6 +261,26 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
     logger.debug(f"[DEBUG] Exit job: category={category} log_name={log_name} current={current} end={end}")
     return task.copy()
 
+
+def upload(args, category, ct_log_url, current, entries, failed_lock, jp_certs_buffer, last_uploaded_index, log_name,
+           my_ip, worker_jp_count):
+    # Parsing
+    jp_certs = extract_jp_certs(entries, log_name, ct_log_url, args, my_ip, current)
+    if jp_certs:
+        worker_jp_count += len(
+            jp_certs)  # Add the number of found jp_certs before deduplication as a reward for the worker
+        jp_certs_buffer.extend(jp_certs)
+        before = len(jp_certs_buffer)
+        # Remove duplicates
+        jp_certs_buffer = filter_jp_certs_unique(jp_certs_buffer)
+        after = len(jp_certs_buffer)
+        # logger.debug(
+        #     f"[DEBUG] JP certs buffer: before={before} after={after} added={len(jp_certs)} total_jp_count={worker_jp_count}")
+    # upload if buffer is large enough
+    if len(jp_certs_buffer) >= 32:
+        last_uploaded_index = upload_jp_certs(args, category, current, jp_certs_buffer, failed_lock)
+        jp_certs_buffer = []
+    return jp_certs_buffer, last_uploaded_index, worker_jp_count
 
 
 # --- common retrying process ---
@@ -285,7 +311,7 @@ def pending_file_name(request_info, prefix):
     return f"{prefix}_{timestamp}_{log_name_clean}_{worker_name_clean}_{uuid_short}.json"
 
 
-def send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, my_ip):
+def send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, my_ip, max_retry_after=0, total_retries=0):
     completed_data = {
         "worker_name": args.worker_name,
         "log_name": log_name,
@@ -298,7 +324,9 @@ def send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded
         "status": JobStatus.COMPLETED.value,
         "jp_count": worker_jp_count,
         "jp_ratio": (worker_jp_count / worker_total_count) if worker_total_count > 0 else 0,
-        "ip_address": my_ip
+        "ip_address": my_ip,
+        "max_retry_after": max_retry_after,
+        "total_retries": total_retries
     }
     url = f"{args.manager}/api/worker/completed"
     try:
@@ -320,7 +348,7 @@ def send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded
         }, prefix="pending_completed")
 
 
-def send_failed(args, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, my_ip):
+def send_failed(args, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, my_ip, max_retry_after=0, total_retries=0):
     data = {
         "worker_name": args.worker_name,
         "log_name": log_name,
@@ -333,7 +361,9 @@ def send_failed(args, log_name, ct_log_url, task, end, current, last_uploaded_in
         "status": JobStatus.FAILED.value,
         "jp_count": worker_jp_count,
         "jp_ratio": (worker_jp_count / worker_total_count) if worker_total_count > 0 else 0,
-        "ip_address": my_ip
+        "ip_address": my_ip,
+        "max_retry_after": max_retry_after,
+        "total_retries": total_retries
     }
     url = f"{args.manager}/api/worker/failed"
     try:
@@ -472,9 +502,9 @@ def category_job_manager(category, args, global_tasks, my_stop_event):
         while not my_stop_event.is_set():
             try:
                 url = f"{args.manager}/api/worker/next_task?category={category}&worker_name={args.worker_name}"
-                logger.debug(url)
+                # logger.debug(url)
                 resp = requests.get(url)
-                logger.debug(f"status_code: {resp.status_code}, body: {resp.text[:200]}")
+                # logger.debug(f"status_code: {resp.status_code}, body: {resp.text[:200]}")
                 if resp.status_code == 200:
                     task = resp.json()
                     # when the job is completed
@@ -975,7 +1005,7 @@ def upload_jp_certs(args, category, current, jp_certs, failed_lock):
 
 # --- send_ping: moved above worker_job_thread ---
 # Send a ping to the manager API to report progress and get updated intervals
-def send_ping(args, category, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, my_ip, last_ping_time, status="running", default_ping_seconds=180, default_ctlog_request_interval_sec=1):
+def send_ping(args, category, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, my_ip, last_ping_time, status="running", default_ping_seconds=180, default_ctlog_request_interval_sec=1, max_retry_after=0, total_retries=0):
     """
     The interval for sending pings is controlled by the API response's ping_interval_sec/ctlog_request_interval_sec.
     The number of failed_files and pending_files is included as query parameters.
@@ -995,7 +1025,9 @@ def send_ping(args, category, log_name, ct_log_url, task, end, current, last_upl
             "status": status,
             "jp_count": worker_jp_count,
             "jp_ratio": jp_ratio,
-            "ip_address": my_ip
+            "ip_address": my_ip,
+            "max_retry_after": max_retry_after,
+            "total_retries": total_retries
         }
         failed_files = len([f for f in os.listdir(FAILED_FILE_DIR) if os.path.isfile(os.path.join(FAILED_FILE_DIR, f))])
         pending_files = len([f for f in os.listdir(PENDING_FILE_DIR) if os.path.isfile(os.path.join(PENDING_FILE_DIR, f))])

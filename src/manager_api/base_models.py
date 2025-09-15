@@ -21,6 +21,8 @@ class WorkerPingBaseModel(BaseModel):
     jp_count: int = 0
     jp_ratio: float = 0.0
     ip_address: str | None = Field(None, max_length=64)
+    total_retries: int | None = None
+    max_retry_after: int | None = None
 
     @validator("worker_name", pre=True, always=True)
     def validate_worker_name(cls, v):
