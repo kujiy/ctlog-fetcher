@@ -7,7 +7,7 @@ from src.config import WORKER_LIVENESS_TTL, WORKER_DEAD_THRESHOLD_MINS, JST
 from src.manager_api.models import WorkerStatus
 from src.share.logger import logger
 from src.share.job_status import JobStatus
-from ..db import get_async_session
+from src.manager_api.db import get_async_session
 
 async def worker_liveness_monitor():
     """
@@ -38,10 +38,8 @@ async def worker_liveness_monitor():
                     # elif await should_skip(w.log_name, w.start, w.end):
                     #     # Update the status to SKIPPED
                     #     w.status = JobStatus.SKIPPED.value
-                    elif await has_no_ping(threshold, w):
-                        w.status = JobStatus.DEAD.value
                     else:
-                        raise Exception("Logic error in worker_liveness_monitor")
+                        w.status = JobStatus.DEAD.value
 
                 await session.commit()
             logger.info(f"  - 2️⃣  - worker_liveness_monitor:sleep_inside_loop={WORKER_LIVENESS_TTL}s")
@@ -51,17 +49,6 @@ async def worker_liveness_monitor():
     except asyncio.CancelledError:
         # Graceful shutdown
         return
-
-
-async def has_no_ping(threshold, w) -> bool:
-    offset_aware_last_ping = w.last_ping
-    if w.last_ping and w.last_ping.tzinfo is None:
-        offset_aware_last_ping = w.last_ping.replace(tzinfo=JST)
-    if w.last_ping is None:
-        return True
-    elif offset_aware_last_ping < threshold:
-        return True
-    return False
 
 
 async def should_skip(log_name, start, end) -> bool:
