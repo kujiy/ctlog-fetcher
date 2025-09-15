@@ -171,12 +171,13 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
                 send_failed(args, log_name, ct_log_url, task, end, current,
                             last_uploaded_index, worker_jp_count, worker_total_count,
                             retry_stats['max_retry_after'], retry_stats['total_retries'])
+                sleep_with_stop_check(120, my_stop_event)
                 break
             if not entries:
                 empty_entries_count += 1
                 # exponential backoff with max 60 seconds
                 sleep_time = min(2 ** empty_entries_count, 60)
-                time.sleep(sleep_time)
+                sleep_with_stop_check(sleep_time, my_stop_event)
                 continue
             else:
                 empty_entries_count = 0
