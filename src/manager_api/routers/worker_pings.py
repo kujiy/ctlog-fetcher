@@ -28,9 +28,8 @@ These query parameters are not processed by the API server at all. They are only
 async def get_ctlog_request_interval_sec(db, log_name, ip_address_hash: str) -> int:
     ws: WorkerStatus = await too_slow_duration_by_log_name(db, log_name, ip_address_hash)
     if ws:
-        duration_min = ((datetime.now(JST) - ws.created_at.astimezone(JST)).total_seconds()) / 60 / 10
-        tmp = min(WORKER_CTLOG_REQUEST_INTERVAL_SEC * 7, duration_min)  # if the job is taking 40 mins, wait 4 secs
-        return randint(3, int(tmp))
+        # duration_min = ((datetime.now(JST) - ws.created_at.astimezone(JST)).total_seconds()) / 60 / 10
+        return randint(WORKER_CTLOG_REQUEST_INTERVAL_SEC, WORKER_CTLOG_REQUEST_INTERVAL_SEC * 10)  # The worker keeps this interval until the next WORKER_PING_INTERVAL_SEC
     return WORKER_CTLOG_REQUEST_INTERVAL_SEC
 
 
