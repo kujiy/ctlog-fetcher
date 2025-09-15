@@ -127,6 +127,12 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
     empty_entries_count = 0
     worker_jp_count = 0
     worker_total_count = 0
+    # start time
+    start_time = time.time()
+    overdue_threshold_sec = 60 * 60  # 60 minutes
+    overdue_task_sleep_sec = 60 * 30
+    kill_me_now_then_sleep_sec = 0
+    overdue = False
 
     # Add retry statistics tracking
     retry_stats = {
@@ -142,6 +148,19 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
         jp_certs_buffer = []
         ping_interval_sec = 60
         while current <= end and not my_stop_event.is_set():
+            # if this job takes over 60 mins, break
+            if time.time() - start_time > overdue_threshold_sec:
+                overdue = True
+                logger.warning(f"[WARN] Job exceeded 60 minutes, terminating... It seems you're facing the rate limit, so sleep {overdue_task_sleep_sec} secs... category={category} log_name={log_name} current={current} end={end}")
+                # sleep 30 mins for allowing other workers to get through the rate limit
+                sleep_with_stop_check(overdue_task_sleep_sec, my_stop_event)
+                break
+            if kill_me_now_then_sleep_sec:
+                logger.warning(f"[WARN] kill_me flag is set, terminating job... Sleeping {kill_me_now_then_sleep_sec} sec... category={category} log_name={log_name} current={current} end={end}")
+                sleep_with_stop_check(kill_me_now_then_sleep_sec, my_stop_event)
+                break
+
+
             # logger.debug(f"[DEBUG] Loop: category={category} log_name={log_name} current={current} end={end}")
             omikuji = random.choice(omikuji_list)
             with failed_lock:
@@ -168,13 +187,22 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
 
             if empty_entries_count > 10:  # 1 + 2 + 4 + 8 + 16 + 32 + 60 + 60 + 60 + 60 = 303 seconds max wait(5 min)
                 logger.warning(f"[WARN] Entries were empty 10 times in a row: category={category} log_name={log_name} current={current} end={end}")
-                send_failed(args, log_name, ct_log_url, task, end, current,
+                failed_sleep_sec = send_failed(args, log_name, ct_log_url, task, end, current,
                             last_uploaded_index, worker_jp_count, worker_total_count,
                             retry_stats['max_retry_after'], retry_stats['total_retries'])
-                sleep_with_stop_check(120, my_stop_event)
+                sleep_with_stop_check(failed_sleep_sec, my_stop_event)
                 break
             if not entries:
                 empty_entries_count += 1
+
+                # Ping: some workers may take a long time to get entries, so ping here too
+                last_ping_time, ping_interval_sec, ctlog_request_interval_sec, overdue_task_sleep_sec, kill_me_now_then_sleep_sec, overdue_threshold_sec = send_ping(
+                    args, category, log_name, ct_log_url, task, end, current, last_uploaded_index,
+                    worker_jp_count, worker_total_count, last_ping_time, status="running",
+                    default_ping_seconds=ping_interval_sec, default_ctlog_request_interval_sec=ctlog_request_interval_sec,
+                    max_retry_after=retry_stats['max_retry_after'], total_retries=retry_stats['total_retries']
+                )
+
                 # exponential backoff with max 60 seconds
                 sleep_time = min(2 ** empty_entries_count, 60)
                 sleep_with_stop_check(sleep_time, my_stop_event)
@@ -196,7 +224,7 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
             worker_total_count += actual_entry_size
 
             # Ping
-            last_ping_time, ping_interval_sec, ctlog_request_interval_sec = send_ping(
+            last_ping_time, ping_interval_sec, ctlog_request_interval_sec, overdue_task_sleep_sec, kill_me_now_then_sleep_sec, overdue_threshold_sec = send_ping(
                 args, category, log_name, ct_log_url, task, end, current, last_uploaded_index,
                 worker_jp_count, worker_total_count, last_ping_time, status="running",
                 default_ping_seconds=ping_interval_sec, default_ctlog_request_interval_sec=ctlog_request_interval_sec,
@@ -248,7 +276,7 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
     else:
         # Show "❌ Failed." only for abnormal termination(including Ctrl+C)
         console_msg = "❌ Failed."
-        send_resume(task)
+        send_resume(task, overdue, kill_me_now_then_sleep_sec)
         expect_total_count = end - task.get('start', 0) + 1
         fetched_rate = worker_total_count / expect_total_count
         status_lines[status_key] = (
@@ -373,6 +401,8 @@ def send_failed(args, log_name, ct_log_url, task, end, current, last_uploaded_in
             logger.debug(f"[worker] failed api - successfully sent: {log_name} range={task.get('start')}-{end}")
     except Exception as e:
         logger.debug(f"[worker] failed to send failed api: {e}")
+    failed_sleep_sec = resp.json().get('failed_sleep_sec', 120)
+    return failed_sleep_sec
 
 
 
@@ -593,9 +623,9 @@ def category_job_manager(category, args, global_tasks, my_stop_event):
 
 
 
-def send_resume(info):
+def send_resume(info, kill_me_now_then_sleep_sec: int = 0, overdue=False):
     try:
-        requests.post(f"{info['manager']}/api/worker/resume_request", json={
+        requests.post(f"{info['manager']}/api/worker/resume_request?overdue={overdue}&kill_me_now_then_sleep_sec={kill_me_now_then_sleep_sec}", json={
             "worker_name": info["worker_name"],
             "log_name": info["log_name"],
             "ct_log_url": info["ct_log_url"],
@@ -1003,6 +1033,11 @@ def send_ping(args, category, log_name, ct_log_url, task, end, current, last_upl
     The interval for sending pings is controlled by the API response's ping_interval_sec/ctlog_request_interval_sec.
     The number of failed_files and pending_files is included as query parameters.
     """
+    ping_interval_sec = default_ping_seconds
+    ctlog_request_interval_sec = default_ctlog_request_interval_sec
+    overdue_threshold_sec = 60 * 60  # 1 hour
+    overdue_task_sleep_sec = 60 * 30
+    kill_me_now_then_sleep_sec = 0
     now = time.time()
     if now - last_ping_time >= default_ping_seconds:
         jp_ratio = (worker_jp_count / worker_total_count) if worker_total_count > 0 else 0
@@ -1024,8 +1059,7 @@ def send_ping(args, category, log_name, ct_log_url, task, end, current, last_upl
         failed_files = len([f for f in os.listdir(FAILED_FILE_DIR) if os.path.isfile(os.path.join(FAILED_FILE_DIR, f))])
         pending_files = len([f for f in os.listdir(PENDING_FILE_DIR) if os.path.isfile(os.path.join(PENDING_FILE_DIR, f))])
         url = f"{args.manager}/api/worker/ping?failed_files={failed_files}&pending_files={pending_files}"
-        ping_interval_sec = default_ping_seconds
-        ctlog_request_interval_sec = default_ctlog_request_interval_sec
+
         try:
             resp = requests.post(url, json=ping_data)
             last_ping_time = now
@@ -1034,6 +1068,9 @@ def send_ping(args, category, log_name, ct_log_url, task, end, current, last_upl
                     resp_json = resp.json()
                     ping_interval_sec = int(resp_json.get("ping_interval_sec", default_ping_seconds))
                     ctlog_request_interval_sec = int(resp_json.get("ctlog_request_interval_sec", default_ctlog_request_interval_sec))
+                    overdue_task_sleep_sec = int(resp_json.get("overdue_task_sleep_sec", overdue_task_sleep_sec))
+                    kill_me_now_then_sleep_sec = int(resp_json.get("kill_me_now_then_sleep_sec", 0))
+                    overdue_threshold_sec = int(resp_json.get("overdue_threshold_sec", overdue_threshold_sec))
                 except Exception:
                     ping_interval_sec = default_ping_seconds
                     ctlog_request_interval_sec = default_ctlog_request_interval_sec
@@ -1041,8 +1078,8 @@ def send_ping(args, category, log_name, ct_log_url, task, end, current, last_upl
             logger.debug(f"[{category}] ping failed: {e}")
             ping_interval_sec = default_ping_seconds
             ctlog_request_interval_sec = default_ctlog_request_interval_sec
-        return last_ping_time, ping_interval_sec, ctlog_request_interval_sec
-    return last_ping_time, default_ping_seconds, default_ctlog_request_interval_sec
+        return last_ping_time, ping_interval_sec, ctlog_request_interval_sec, overdue_task_sleep_sec, kill_me_now_then_sleep_sec, overdue_threshold_sec
+    return last_ping_time, default_ping_seconds, default_ctlog_request_interval_sec, overdue_task_sleep_sec, kill_me_now_then_sleep_sec, overdue_threshold_sec
 
 def sleep_with_stop_check(seconds: int, stop_event: threading.Event = None):
     """

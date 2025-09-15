@@ -54,6 +54,8 @@ class WorkerResumeRequestModel(BaseModel):
     @validator("worker_name", pre=True, always=True)
     def validate_worker_name(cls, v):
         import re
+        if not v:
+            return "default"
         if v is None or (isinstance(v, str) and v.strip() == ""):
             return "default"
         if not isinstance(v, str):

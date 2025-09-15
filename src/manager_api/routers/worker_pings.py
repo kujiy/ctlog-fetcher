@@ -38,7 +38,10 @@ async def worker_ping(data: WorkerPingModel, request: Request, db=Depends(get_as
     # await update_worker_status_and_summary(data, db, JobStatus.RUNNING.value, request)
     return {
         "ping_interval_sec": WORKER_PING_INTERVAL_SEC,
-        "ctlog_request_interval_sec": await get_ctlog_request_interval_sec(db, data.log_name, extract_ip_address_hash(request))
+        "ctlog_request_interval_sec": await get_ctlog_request_interval_sec(db, data.log_name, extract_ip_address_hash(request)),
+        "overdue_threshold_sec": 60 * 60,  # worker time limit: 60 minutes
+        "overdue_task_sleep_sec": 60 * 30,  # 30 minutes
+        "kill_me_now_then_sleep_sec": 0,# >0 means the worker should exit right now, then sleep this seconds before exit
     }
 
 # completed: when a job is completed
@@ -49,7 +52,8 @@ async def worker_completed(data: WorkerPingBaseModel, request: Request, db=Depen
 # failed: when a job is failed due to: CT Log API has corrupted data, network error, etc.
 @router.post("/api/worker/failed")
 async def worker_failed(data: WorkerPingBaseModel, request: Request, db=Depends(get_async_session)):
-    return await update_worker_status_and_summary(data, db, JobStatus.FAILED.value, request)
+    await update_worker_status_and_summary(data, db, JobStatus.FAILED.value, request)
+    return {"failed_sleep_sec": 600}  # worker should sleep this seconds before asking for a new task
 
 
 async def update_worker_status_and_summary(data: WorkerPingModel | WorkerPingBaseModel, db, status_value, request: Request):

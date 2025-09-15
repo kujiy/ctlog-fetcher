@@ -240,14 +240,17 @@ async def worker_resume_request(data: WorkerResumeRequestModel, db=Depends(get_a
     lock_key = (data.worker_name, data.log_name, data.start, data.end)
     async with locks[lock_key]:
         ws_stmt = select(WorkerStatus).where(
-            WorkerStatus.log_name==data.log_name,
-            WorkerStatus.start==data.start,
-            WorkerStatus.end==data.end
+            WorkerStatus.log_name == data.log_name,
+            WorkerStatus.worker_name == data.worker_name,
+            WorkerStatus.status == JobStatus.RUNNING.value,
+            WorkerStatus.start == data.start,
+            WorkerStatus.end == data.end,
         )
         ws = (await db.execute(ws_stmt)).scalars().first()
         if ws:
             ws.status = JobStatus.RESUME_WAIT.value
             ws.last_ping = datetime.now(JST)
+            ws.duration_sec = (datetime.now(JST) - ws.created_at.astimezone(JST)).total_seconds()
             await db.commit()
     return {"message": "ok"}
 
