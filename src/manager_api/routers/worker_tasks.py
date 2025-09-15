@@ -93,7 +93,7 @@ async def get_next_task(
         # Exclude log_name of completed past CT Logs or current CT Logs that have almost been retrieved
         exclude_log_names = await get_almost_completed_log_names(db, category)
         ## Exclude log_name that the worker has failed or dead recently(rate limit avoidance)
-        # exclude_log_names += await get_failed_log_names_by(db, worker_name)
+        exclude_log_names += await get_failed_log_names_by(db, worker_name)
         # exclude_log_names += await get_dead_log_names_by(db, worker_name)
         # exclude_log_names += await rate_limit_candidate_log_names(db, worker_name)
         exclude_log_names += await too_slow_log_names(db, ip_address_hash)
