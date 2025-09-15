@@ -344,7 +344,7 @@ async def rate_limit_candidate_log_names(db, worker_name):
     for row in rows:
         log_name, unsuccessful_rate = row
         # Include logs with unsuccessful_rate > 0.1 with n% probability
-        if unsuccessful_rate > 0.1 and random.random() < 0.99:
+        if unsuccessful_rate > 0.1 and random.random() < 0.9:
             rate_limited_logs.append(log_name)
 
     return rate_limited_logs

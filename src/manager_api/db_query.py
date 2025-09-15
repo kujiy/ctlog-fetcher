@@ -88,7 +88,11 @@ async def too_slow_log_names(db, ip_address_hash):
     stmt = select(WorkerStatus.log_name).where(
         WorkerStatus.status == JobStatus.RUNNING.value,
         WorkerStatus.ip_address == ip_address_hash,
-        WorkerStatus.created_at < threshold
+        ## Exclude the dead job - the worker left the job without updating the status
+        # old job
+        WorkerStatus.created_at < threshold,
+        # but still alive
+        WorkerStatus.last_ping > threshold,
     )
     rows = (await db.execute(stmt)).all()
     log_names = [row[0] for row in rows]  # ['nimbus2026', 'nimbus2025']
