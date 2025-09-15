@@ -282,6 +282,10 @@
             fetchDataForTimeRange(hours, bucketHours);
         });
     </script>
+
+<p>Dead: 180 分以内にpingが来なかった = CT Log API の 1 request 失敗の retry で 180分以上かかってる？</p>
+<p>Failed: 10回連続でCT Log API から取得できなかった</p>
+
     <table>
         <thead>
             <tr>

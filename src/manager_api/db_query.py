@@ -95,6 +95,7 @@ async def too_slow_log_names(db, ip_address_hash):
     return log_names
 
 # ping
+@cached(TTLCache(maxsize=255, ttl=120))
 async def too_slow_duration_by_log_name(db, log_name, ip_address_hash) -> WorkerStatus:
     # ip_address_hash = "f8f1bcb"
     # Rate limit avoidance: if there are many workers from the same IP, exclude logs that have been running for more than 30 minutes
