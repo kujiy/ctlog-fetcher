@@ -284,8 +284,14 @@ async def get_failed_log_names_by(db, worker_name):
         WorkerStatus.last_ping > threshold
     )
     rows = (await db.execute(stmt)).all()
-    return [row[0] for row in rows]
+    log_names = [row[0] for row in rows]
+    if log_names and random.random() > 0.9:
+        # remove random one element
+        key = random.randint(0, len(log_names) - 1)
+        log_names = log_names[:key] + log_names[key+1:]
+    return log_names
 
+# dead can also be triggered by Ctrl+C, so do not use it for rate limit determination.
 @cached(TTLCache(maxsize=256, ttl=60*10))
 async def get_dead_log_names_by(db, worker_name):
     # 30 minutes ago
