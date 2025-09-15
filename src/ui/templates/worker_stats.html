@@ -42,6 +42,7 @@
     {% set running_py = [] -%}
     {% set resume_wait_py = [] -%}
     {% set dead_py = [] -%}
+    {% set failed_py = [] -%}
     {% set completed_rate_py = [] -%}
     {%- for row in status_stats %}
         {%- set _ = hour_labels_py.append(row.hour_label) -%}
@@ -49,6 +50,7 @@
         {%- set _ = running_py.append(row.status_counts.running) -%}
         {%- set _ = resume_wait_py.append(row.status_counts.resume_wait) -%}
         {%- set _ = dead_py.append(row.status_counts.dead) -%}
+        {%- set _ = failed_py.append(row.status_counts.failed) -%}
         {%- set total = row.status_counts.running + row.status_counts.completed + row.status_counts.resume_wait + row.status_counts.dead -%}
         {%- set _ = total_jobs_py.append(total) -%}
         {%- set _ = completed_rate_py.append(((row.status_counts.completed / total * 100) if total > 0 else 0) | round(2)) -%}
@@ -73,6 +75,7 @@
         let running = {{ running_py | tojson | safe }};
         let resumeWait = {{ resume_wait_py | tojson | safe }};
         let dead = {{ dead_py | tojson | safe }};
+        let failed = {{ failed_py | tojson | safe }};
         let completedRate = {{ completed_rate_py | tojson | safe }};
 
         // Reverse arrays for graph (so latest is rightmost)
@@ -81,6 +84,7 @@
         running = running.slice().reverse();
         resumeWait = resumeWait.slice().reverse();
         dead = dead.slice().reverse();
+        failed = failed.slice().reverse();
         completedRate = completedRate.slice().reverse();
 
         let chart = null;
@@ -134,6 +138,16 @@
                         data: dead,
                         backgroundColor: 'rgba(220, 53, 69, 0.5)',
                         borderColor: 'rgba(220, 53, 69, 1)',
+                        borderWidth: 1,
+                        yAxisID: 'y',
+                        type: 'bar',
+                        stack: 'jobs'
+                    },
+                    {
+                        label: 'Failed',
+                        data: failed,
+                        backgroundColor: 'rgba(120, 120, 120, 0.5)',
+                        borderColor: 'rgba(120, 120, 120, 1)',
                         borderWidth: 1,
                         yAxisID: 'y',
                         type: 'bar',
@@ -198,6 +212,7 @@
                 running = [];
                 resumeWait = [];
                 dead = [];
+                failed = [];
                 completedRate = [];
 
                 // Process the data
@@ -207,9 +222,10 @@
                     running.push(row.status_counts.running);
                     resumeWait.push(row.status_counts.resume_wait);
                     dead.push(row.status_counts.dead);
+                    failed.push(row.status_counts.failed);
 
                     const total = row.status_counts.running + row.status_counts.completed +
-                                 row.status_counts.resume_wait + row.status_counts.dead;
+                                 row.status_counts.resume_wait + row.status_counts.dead + row.status_counts.failed;
                     const rate = total > 0 ? (row.status_counts.completed / total * 100).toFixed(2) : 0;
                     completedRate.push(parseFloat(rate));
                 }
@@ -220,6 +236,7 @@
                 running = running.slice().reverse();
                 resumeWait = resumeWait.slice().reverse();
                 dead = dead.slice().reverse();
+                failed = failed.slice().reverse();
                 completedRate = completedRate.slice().reverse();
 
                 // Update the chart

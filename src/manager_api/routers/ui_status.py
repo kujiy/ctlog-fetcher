@@ -9,7 +9,7 @@ from src.manager_api.models import WorkerLogStat, WorkerStatus
 from datetime import datetime, timedelta
 from fastapi import Depends, APIRouter
 from sqlalchemy import func, select, text
-from src.share.job_status import JobStatus
+from src.share.job_status import JobStatus, ALL_JOB_STATUS
 from src.manager_api.models import WorkerStatusAggs
 from src.share.logger import logger
 
@@ -168,15 +168,13 @@ async def get_worker_stats(
                 bucket["log_name_counts"][ln] = bucket["log_name_counts"].get(ln, 0) + 1
                 break
 
-    job_status_order = [JobStatus.RUNNING.value, JobStatus.COMPLETED.value, JobStatus.RESUME_WAIT.value, JobStatus.SKIPPED.value, JobStatus.DEAD.value]
-
     # order by most recent hour first
     buckets_sorted = list(reversed(buckets))
 
     status_stats = []
     for b in buckets_sorted:
         # status_counts: include all job statuses
-        status_counts = {status: b["status_counts"].get(status, 0) for status in job_status_order}
+        status_counts = {status: b["status_counts"].get(status, 0) for status in ALL_JOB_STATUS}
         # log_name_counts: order by count desc
         log_name_counts = dict(sorted(b["log_name_counts"].items(), key=lambda x: x[1], reverse=True))
         # hour_label: "YYYY-MM-DD HH:00 - HH:00"
