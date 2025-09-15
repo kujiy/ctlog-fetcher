@@ -3,8 +3,6 @@ import glob
 import argparse
 import sys, os
 
-from src.share.utils import convert_ip_address_hash
-
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 import hashlib
 import time
@@ -118,7 +116,6 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
     task["ct_log_url"] = ct_log_url
     task["start"] = task.get('start')
     task["end"] = end
-    # task["ip_address"] = args.ip_address
     task["status"] = JobStatus.RUNNING.value
     jobkey = f"{category}_{log_name}_{current}_{end}"
     global_tasks[jobkey] = task
@@ -128,7 +125,6 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
     start_time = time.time()
     last_uploaded_index = None
     empty_entries_count = 0
-    my_ip = get_public_ip_address_hash()
     worker_jp_count = 0
     worker_total_count = 0
 
@@ -173,7 +169,7 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
             if empty_entries_count > 10:  # 1 + 2 + 4 + 8 + 16 + 32 + 60 + 60 + 60 + 60 = 303 seconds max wait(5 min)
                 logger.warning(f"[WARN] Entries were empty 10 times in a row: category={category} log_name={log_name} current={current} end={end}")
                 send_failed(args, log_name, ct_log_url, task, end, current,
-                            last_uploaded_index, worker_jp_count, worker_total_count, my_ip,
+                            last_uploaded_index, worker_jp_count, worker_total_count,
                             retry_stats['max_retry_after'], retry_stats['total_retries'])
                 break
             if not entries:
@@ -193,7 +189,7 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
             # upload
             jp_certs_buffer, last_uploaded_index, worker_jp_count = upload(args, category, ct_log_url, current, entries,
                                                                            failed_lock, jp_certs_buffer,
-                                                                           last_uploaded_index, log_name, my_ip,
+                                                                           last_uploaded_index, log_name,
                                                                            worker_jp_count)
 
             worker_total_count += actual_entry_size
@@ -201,7 +197,7 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
             # Ping
             last_ping_time, ping_interval_sec, ctlog_request_interval_sec = send_ping(
                 args, category, log_name, ct_log_url, task, end, current, last_uploaded_index,
-                worker_jp_count, worker_total_count, my_ip, last_ping_time, status="running",
+                worker_jp_count, worker_total_count, last_ping_time, status="running",
                 default_ping_seconds=ping_interval_sec, default_ctlog_request_interval_sec=ctlog_request_interval_sec,
                 max_retry_after=retry_stats['max_retry_after'], total_retries=retry_stats['total_retries']
             )
@@ -241,7 +237,7 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
         console_msg = "✅ Completed!"
         task["status"] = JobStatus.COMPLETED.value
         global_tasks[jobkey]["status"] = JobStatus.COMPLETED.value
-        send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, my_ip,
+        send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count,
                       retry_stats['max_retry_after'], retry_stats['total_retries'])
         expect_total_count = end - task.get('start', 0) + 1
         fetched_rate = worker_total_count / expect_total_count
@@ -263,9 +259,9 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
 
 
 def upload(args, category, ct_log_url, current, entries, failed_lock, jp_certs_buffer, last_uploaded_index, log_name,
-           my_ip, worker_jp_count):
+            worker_jp_count):
     # Parsing
-    jp_certs = extract_jp_certs(entries, log_name, ct_log_url, args, my_ip, current)
+    jp_certs = extract_jp_certs(entries, log_name, ct_log_url, args, current)
     if jp_certs:
         worker_jp_count += len(
             jp_certs)  # Add the number of found jp_certs before deduplication as a reward for the worker
@@ -311,7 +307,7 @@ def pending_file_name(request_info, prefix):
     return f"{prefix}_{timestamp}_{log_name_clean}_{worker_name_clean}_{uuid_short}.json"
 
 
-def send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, my_ip, max_retry_after=0, total_retries=0):
+def send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, max_retry_after=0, total_retries=0):
     completed_data = {
         "worker_name": args.worker_name,
         "log_name": log_name,
@@ -324,7 +320,6 @@ def send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded
         "status": JobStatus.COMPLETED.value,
         "jp_count": worker_jp_count,
         "jp_ratio": (worker_jp_count / worker_total_count) if worker_total_count > 0 else 0,
-        "ip_address": my_ip,
         "max_retry_after": max_retry_after,
         "total_retries": total_retries
     }
@@ -348,7 +343,7 @@ def send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded
         }, prefix="pending_completed")
 
 
-def send_failed(args, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, my_ip, max_retry_after=0, total_retries=0):
+def send_failed(args, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, max_retry_after=0, total_retries=0):
     data = {
         "worker_name": args.worker_name,
         "log_name": log_name,
@@ -361,7 +356,6 @@ def send_failed(args, log_name, ct_log_url, task, end, current, last_uploaded_in
         "status": JobStatus.FAILED.value,
         "jp_count": worker_jp_count,
         "jp_ratio": (worker_jp_count / worker_total_count) if worker_total_count > 0 else 0,
-        "ip_address": my_ip,
         "max_retry_after": max_retry_after,
         "total_retries": total_retries
     }
@@ -606,7 +600,6 @@ def send_resume(info):
             "ct_log_url": info["ct_log_url"],
             "start": info["start"],
             "end": info["end"],
-            "ip_address": info.get("ip_address")
         }, timeout=10)
     except Exception as e:
         logger.debug(f"Failed to send resume_request: {e}")
@@ -904,7 +897,7 @@ def report_worker_error(args, error_type, error_message, traceback_str, entry=No
         logger.warning(f"[worker_error] failed to report error: {post_e}")
 
 
-def extract_jp_certs(entries, log_name, ct_log_url, args, my_ip, current):
+def extract_jp_certs(entries, log_name, ct_log_url, args, current):
     jp_certs = []
     parser = JPCertificateParser()
     for i, entry in enumerate(entries):
@@ -952,7 +945,6 @@ def extract_jp_certs(entries, log_name, ct_log_url, args, my_ip, current):
                 "log_name": log_name,
                 "worker_name": args.worker_name,
                 "ct_index": current + i,
-                "ip_address": my_ip,
                 "issuer": cert_data.get('issuer'),
                 "common_name": cert_data.get('subject_common_name')
             })
@@ -1005,7 +997,7 @@ def upload_jp_certs(args, category, current, jp_certs, failed_lock):
 
 # --- send_ping: moved above worker_job_thread ---
 # Send a ping to the manager API to report progress and get updated intervals
-def send_ping(args, category, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, my_ip, last_ping_time, status="running", default_ping_seconds=180, default_ctlog_request_interval_sec=1, max_retry_after=0, total_retries=0):
+def send_ping(args, category, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, last_ping_time, status="running", default_ping_seconds=180, default_ctlog_request_interval_sec=1, max_retry_after=0, total_retries=0):
     """
     The interval for sending pings is controlled by the API response's ping_interval_sec/ctlog_request_interval_sec.
     The number of failed_files and pending_files is included as query parameters.
@@ -1025,7 +1017,6 @@ def send_ping(args, category, log_name, ct_log_url, task, end, current, last_upl
             "status": status,
             "jp_count": worker_jp_count,
             "jp_ratio": jp_ratio,
-            "ip_address": my_ip,
             "max_retry_after": max_retry_after,
             "total_retries": total_retries
         }
@@ -1171,25 +1162,11 @@ def validate_worker_name(worker_name):
     return worker_name
 
 
-
-def get_public_ip_address_hash():
-    try:
-        resp = requests.get("https://ifconfig.io/ip", timeout=5)
-        if resp.status_code == 200:
-            ip = resp.text.strip()
-            ip_hash = convert_ip_address_hash(ip)
-            return ip_hash
-        else:
-            return "unknown"
-    except Exception:
-        return "unknown"
-
 if __name__ == '__main__':
     args = get_args()
 
     # worker_name validation
     args.worker_name = validate_worker_name(args.worker_name)
-    # args.ip_address = get_public_ip_address_hash()  # get by the api side
 
     # Print args line by line
     for k, v in vars(args).items():
