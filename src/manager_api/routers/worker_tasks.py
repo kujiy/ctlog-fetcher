@@ -351,12 +351,12 @@ async def rate_limit_candidate_log_names(db, worker_name):
 
     rows = (await db.execute(text(raw_sql), params)).all()
 
-    # Filter logs with unsuccessful_rate > 0.1 and include with 80% probability
+    # Filter logs with unsuccessful_rate > 0.1 and include with n% probability
     rate_limited_logs = []
     for row in rows:
         log_name, unsuccessful_rate = row
-        # Include logs with unsuccessful_rate > 0.1 with 80% probability
-        if unsuccessful_rate > 0.1 and random.random() < 0.8:
+        # Include logs with unsuccessful_rate > 0.1 with n% probability
+        if unsuccessful_rate > 0.1 and random.random() < 0.99:
             rate_limited_logs.append(log_name)
 
     return rate_limited_logs
