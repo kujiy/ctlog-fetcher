@@ -65,7 +65,7 @@ async def update_worker_status_and_summary(data: WorkerPingModel | WorkerPingBas
             ws.jp_ratio = data.jp_ratio
             ws.total_retries = data.total_retries
             ws.max_retry_after = data.max_retry_after
-            if ws.created_at and status_value == JobStatus.COMPLETED.value:
+            if status_value == JobStatus.COMPLETED.value:
                 ws.duration_sec = (now - ws.created_at.astimezone(JST)).total_seconds()
             await db.commit()
 
