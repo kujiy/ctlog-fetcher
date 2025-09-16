@@ -99,12 +99,14 @@ class WorkerErrorModel(BaseModel):
     ct_index: int | None = None
     error_type: str = Field(..., min_length=1, max_length=64, description="Type of error, e.g. 'parse_error', 'upload_error', etc.")
     error_message: str = Field(..., min_length=1, max_length=2048)
-    traceback: str = Field(..., min_length=1, max_length=10000)
-    entry: str = Field(..., min_length=10, max_length=1000000, description="CT log entry as JSON string")
+    traceback: str = Field(...)
+    entry: str = Field(..., description="CT log entry as JSON string")
 
     @validator("worker_name", pre=True, always=True)
     def validate_worker_name(cls, v):
         import re
+        if not v:
+            return "default"
         if v is None or (isinstance(v, str) and v.strip() == ""):
             return "default"
         if not isinstance(v, str):

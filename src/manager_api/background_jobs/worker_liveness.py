@@ -38,6 +38,11 @@ async def worker_liveness_monitor():
                     # elif await should_skip(w.log_name, w.start, w.end):
                     #     # Update the status to SKIPPED
                     #     w.status = JobStatus.SKIPPED.value
+
+                    # Workers that die immediately due to errors are discarded.
+                    # Updating them to dead turns them red and interferes with analysis; updating them to completed causes uncollected ranges to remain uncollected.
+                    if w.created_at == w.last_ping:  # a worker gets a job but quit by an error before starting to work
+                        await session.delete(w)
                     else:
                         w.status = JobStatus.DEAD.value
 
