@@ -29,7 +29,7 @@ async def get_ctlog_request_interval_sec(db, log_name, ip_address_hash: str) -> 
     ws: WorkerStatus = await too_slow_duration_by_log_name(db, log_name, ip_address_hash)
     if ws:
         # duration_min = ((datetime.now(JST) - ws.created_at.astimezone(JST)).total_seconds()) / 60 / 10
-        return randint(WORKER_CTLOG_REQUEST_INTERVAL_SEC, WORKER_CTLOG_REQUEST_INTERVAL_SEC * 10)  # The worker keeps this interval until the next WORKER_PING_INTERVAL_SEC
+        return randint(WORKER_CTLOG_REQUEST_INTERVAL_SEC * 2, WORKER_CTLOG_REQUEST_INTERVAL_SEC * 10)  # The worker keeps this interval until the next WORKER_PING_INTERVAL_SEC
     return WORKER_CTLOG_REQUEST_INTERVAL_SEC
 
 
@@ -103,14 +103,13 @@ async def update_worker_status_and_summary(data: WorkerPingModel | WorkerPingBas
 
 
 @router.post("/api/worker/error")
-async def worker_error(data: WorkerErrorModel):
-    # Add to worker_errors.log (JSON Lines format)
+async def worker_error(request: Request):
+    # Save raw request body to worker_errors.log (accept any content)
     log_path = os.path.join(os.path.dirname(__file__), "worker_errors.log")
     try:
+        body = await request.body()
         with open(log_path, "a") as f:
-            f.write(json.dumps(data.model_dump(), ensure_ascii=False) + "\n")
+            f.write(body.decode("utf-8", errors="replace") + "\n")
     except Exception as e:
         logging.getLogger("worker_error_api").error(f"Failed to write worker error: {e}")
     return {"message": "ok"}
-
-

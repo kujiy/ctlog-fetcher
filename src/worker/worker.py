@@ -243,13 +243,16 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
         if jp_certs_buffer:
             last_uploaded_index = upload_jp_certs(args, category, current, jp_certs_buffer, failed_lock)
     except Exception as e:
-        tb = traceback.format_exc()
-        logger.error(f"[{category}] Exception in worker_job_thread:\n{tb}")
+        _tb = traceback.format_exc()
+        _exc = sys.exc_info()
+
+        logger.error(f"[{category}] Exception in worker_job_thread:\n{_tb}")
         report_worker_error(
             args=args,
             error_type="worker_job_thread_error",
             error_message=str(e),
-            traceback_str=tb
+            traceback_str=_tb + "---\n" + str(_exc),
+            task=task,
         )
         return None
 
@@ -573,14 +576,19 @@ def category_job_manager(category, args, global_tasks, my_stop_event):
                 else:
                     continue
             except Exception as e:
-                tb = traceback.format_exc()
-                logger.error(f"[{category}] Exception getting next_task (moving to the fail-safe mode):\n{tb}")
-                report_worker_error(
+                _tb = traceback.format_exc()
+                _exc = sys.exc_info()
+                logger.error(f"[{category}] Exception getting next_task (moving to the fail-safe mode):\n{_tb}")
+                data = dict(
                     args=args,
                     error_type="category_job_manager_error",
                     error_message=str(e),
-                    traceback_str=tb
+                    traceback_str=_tb + "---\n" + str(_exc)
                 )
+                if "task" in locals():
+                    data["task"] = task
+                report_worker_error(**data)
+
                 fail_count += 1
                 sleep_with_stop_check(1, my_stop_event)
                 result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, [task], args)
@@ -596,13 +604,16 @@ def category_job_manager(category, args, global_tasks, my_stop_event):
             try:
                 completed_task = worker_job_thread(category, task, args, global_tasks, ctlog_request_interval_sec)
             except Exception as e:
-                tb = traceback.format_exc()
-                logger.error(f"[{category}] Exception in job thread:\n{tb}")
+                _tb = traceback.format_exc()
+                _exc = sys.exc_info()
+
+                logger.error(f"[{category}] Exception in job thread:\n{_tb}")
                 report_worker_error(
                     args=args,
                     error_type="category_job_manager_jobthread_error",
                     error_message=str(e),
-                    traceback_str=tb
+                    traceback_str=_tb + "---\n" + str(_exc),
+                    task=task,
                 )
                 completed_task = None
             if completed_task is not None:
@@ -610,14 +621,19 @@ def category_job_manager(category, args, global_tasks, my_stop_event):
             if not my_stop_event.is_set():
                 logger.debug(f"{category}: job completed. Fetching next job")
     except Exception as e:
-        tb = traceback.format_exc()
-        logger.error(f"[{category}] Exception in category_job_manager:\n{tb}")
-        report_worker_error(
+        _tb = traceback.format_exc()
+        _exc = sys.exc_info()
+        logger.error(f"[{category}] Exception in category_job_manager:\n{_tb}")
+        data = dict(
             args=args,
             error_type="category_job_manager_fatal",
             error_message=str(e),
-            traceback_str=tb
+            traceback_str=_tb + "---\n" + str(_exc)
         )
+        if "task" in locals():
+            data["task"] = task
+        print("task!")
+        report_worker_error(**data)
 
     logger.debug(f"Exiting category job manager for {category}")
 
@@ -911,17 +927,10 @@ def update_console_message(status_lines, category, log_name, req_count, current,
         f"[{category}] 🌐 Req: {req_count} | 📍 Index: {current} | 🇯🇵 Domain: {worker_jp_count}({jp_ratio*100:.2f}%) | Progress: {progress_pct:.2f}% | ⏱️ ETA: {eta_str} {face} | {omikuji}{retry_str}"
     )
 
-def report_worker_error(args, error_type, error_message, traceback_str, entry=None, log_name=None, ct_log_url=None, ct_index=None):
-    payload = {
-        "worker_name": getattr(args, "worker_name", "unknown"),
-        "log_name": log_name or getattr(args, "log_name", None) or "unknown",
-        "ct_log_url": ct_log_url or getattr(args, "ct_log_url", None) or "unknown",
-        "ct_index": ct_index,
-        "error_type": error_type,
-        "error_message": error_message,
-        "traceback": traceback_str,
-        "entry": json.dumps(entry, separators=(',', ':')) if entry is not None else None
-    }
+def report_worker_error(args, **kwargs):
+    payload = dict(**kwargs)
+    payload["args"] = str(args)
+    print("payload")
     try:
         requests.post(f"{args.manager}/api/worker/error", json=payload, timeout=10)
     except Exception as post_e:
@@ -935,7 +944,7 @@ def extract_jp_certs(entries, log_name, ct_log_url, args, current):
         try:
             cert_data = parser.parse_only_jp_cert(entry)
         except Exception as e:
-            tb = traceback.format_exc()
+            _tb = traceback.format_exc()
             ct_index = current + i
 
             # Save failed entry to tests/resources/failed directory
@@ -947,7 +956,7 @@ def extract_jp_certs(entries, log_name, ct_log_url, args, current):
                     "ct_index": ct_index,
                     "worker_name": args.worker_name,
                     "error_message": str(e),
-                    "traceback": tb,
+                    "traceback": _tb,
                     "timestamp": time.time()
                 }
                 failed_filename = f"failed_entry_{log_name}_{ct_index}_{uuid.uuid4().hex[:8]}.json"
@@ -962,7 +971,7 @@ def extract_jp_certs(entries, log_name, ct_log_url, args, current):
                 args=args,
                 error_type="parse_error",
                 error_message=str(e),
-                traceback_str=tb,
+                traceback_str=_tb,
                 entry=entry,
                 log_name=log_name,
                 ct_log_url=ct_log_url,
@@ -1219,6 +1228,7 @@ if __name__ == '__main__':
         tb = traceback.format_exc()
         logger.error(f"[main] Unhandled exception:\n{tb}")
         report_worker_error(
+            args=args,
             error_type="main_error",
             error_message=str(e),
             traceback_str=tb
