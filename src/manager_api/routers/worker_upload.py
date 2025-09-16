@@ -111,21 +111,15 @@ async def upload_certificates(
                     inserted += 1
                     # Register in cache only on success
                     await cert_cache.add(cert.issuer, cert.serial_number, cert.certificate_fingerprint_sha256)
-                except IntegrityError:
+                except IntegrityError as e:
                     # Duplicate error (if unique index exists)
                     await db.rollback()
                     skipped_duplicates += 1
+                    await save_failed(e, items)
                     # Add to cache as duplicate (for skipping next time)
                     await cert_cache.add(cert.issuer, cert.serial_number, cert.certificate_fingerprint_sha256)
         except Exception as e:
-            # Save request to pending/upload_failure as JSON
-            os.makedirs("pending/upload_failure", exist_ok=True)
-            now = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-            rand = random.randint(1000, 9999)
-            filename = f"pending/upload_failure/upload_failure_{now}_{rand}.json"
-            with open(filename, "w", encoding="utf-8") as f:
-                json.dump([item.dict() for item in items], f, ensure_ascii=False, indent=2)
-            logger.error(f"[CRITICAL:upload_certificates] Failed to store certs. Saved request to {filename}. Please run scripts/upload_pending_failure.sh to retry. Error: {e}")
+            await save_failed(e, items)
             return {"inserted": 0, "skipped_duplicates": 0}
 
     # Output cache statistics to log (for debugging)
@@ -137,3 +131,15 @@ async def upload_certificates(
 
     logger.debug(f"[upload_certificates] Result: inserted={inserted}, skipped_duplicates={skipped_duplicates}")
     return {"inserted": inserted, "skipped_duplicates": skipped_duplicates}
+
+
+async def save_failed(e, items):
+    # Save request to pending/upload_failure as JSON
+    os.makedirs("pending/upload_failure", exist_ok=True)
+    now = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+    rand = random.randint(1000, 9999)
+    filename = f"pending/upload_failure/upload_failure_{now}_{rand}.json"
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump([item.dict() for item in items], f, ensure_ascii=False, indent=2)
+    logger.error(
+        f"[CRITICAL:upload_certificates] Failed to store certs. Saved request to {filename}. Please run scripts/upload_pending_failure.sh to retry. Error: {e}")
