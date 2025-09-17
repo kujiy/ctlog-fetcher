@@ -63,8 +63,10 @@ async def background_log_fetch_snapshot_job():
                     await save_log_fetch_progress_snapshot(session)
             except Exception as e:
                 logger.error(f"Background job error: {e}")
-            logger.info(f"    - ️5️⃣  background_log_fetch_snapshot_job:sleep=3600")
-            await asyncio.sleep(3600)
+            break  # Exit the async for loop after one iteration
+        
+        logger.info(f"    - ️5️⃣  background_log_fetch_snapshot_job:sleep=3600")
+        await asyncio.sleep(3600)
 
 def start_log_fetch_snapshot_job():
     logger.info("5️⃣ Starting log fetch snapshot job")
