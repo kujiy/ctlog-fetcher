@@ -500,7 +500,16 @@ def handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, task_re
             if args is not None:
                 wait_for_manager_api_ready(args.manager)
             sth_end = last_job.get("sth_end", last_job["end"])
-            next_start = random.randint(last_job["end"] + 1, sth_end) // 16000 * 16000  # pick a random start point aligned to 16000
+            if last_job["end"] + 1 >= sth_end:
+                # when reach the end, wait for sth_end to be updated
+                logger.warning(
+                    f"{category}: API failure/exception occurred {fail_count} times, but end+1 >= sth_end ({last_job['end']+1} >= {sth_end}). Sleeping n seconds before retrying."
+                )
+                sleep_with_stop_check(60 * 10, None)  # 1分スリープ
+                return False, fail_count, last_job
+            else:
+                # 通常通り、ランダムな値を選択
+                next_start = random.randint(last_job["end"] + 1, sth_end) // 16000 * 16000  # pick a random start point aligned to 16000
             next_end = next_start + batch_size - 1
             if next_end > sth_end:
                 next_end = sth_end
