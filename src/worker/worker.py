@@ -22,7 +22,7 @@ import traceback
 import re
 import datetime
 import urllib.parse
-from src.config import CT_LOG_ENDPOINTS, WORKER_THREAD_MANAGER_INTERVAL_SEC
+from src.config import CT_LOG_ENDPOINTS, WORKER_THREAD_MANAGER_INTERVAL_SEC, MANAGER_API_URL, DASHBOARD_URL
 from collections import Counter
 
 from dotenv import load_dotenv
@@ -1143,13 +1143,13 @@ def is_dns_active(parsed):
 
 
 global_tasks = {}
-command_description = '''CT Log Fetcher
+command_description = f'''CT Log Fetcher
 
 Project details:
 TBD
 
 Worker Ranking
-http://ctlog-fetcher.tplinkdns.com/
+{DASHBOARD_URL}/worker_ranking
 
 Each CT Log API applies rate limits per public IP address.
 Adding proxies can speed things up, but it costs money and puts a load on the CT Log API, so please don't overdo it.
@@ -1159,7 +1159,7 @@ def get_args():
     # Get default values from environment variables
     proxies_env = os.environ.get('PROXIES')
     worker_name_env = os.environ.get('WORKER_NAME')
-    manager_url_env = os.environ.get('MANAGER_URL', 'http://ctlog-fetcher.tplinkdns.com:1173')
+    manager_url_env = os.environ.get('MANAGER_URL', MANAGER_API_URL)
     debug_env = os.environ.get('DEBUG')
     max_threads_env = os.environ.get('MAX_THREADS', 10)  # Increasing threads increases worker traffic, so be careful
 

@@ -32,13 +32,20 @@ CREATE DATABASE ct DEFAULT CHARACTER SET utf8mb4;
 pip install -r requirements.txt
 ```
 
-2. Initialize DB (only the first time)
+2. **Configure database connection**: Copy `src/config_secret.py.example` to `src/config_secret.py` and configure your MySQL connection URL
+
+```
+cp src/config_secret.py.example src/config_secret.py
+# Edit src/config_secret.py to set your MySQL connection details
+```
+
+3. Initialize DB (only the first time)
 
 ```
 python -c "from src.manager_api import models; models.Base.metadata.create_all(models.engine)"
 ```
 
-3. Start API server
+4. Start API server
 
 ```
 uvicorn src.manager_api.main:app --host 0.0.0.0 --port 1173

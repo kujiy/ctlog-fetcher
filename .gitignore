@@ -11,6 +11,8 @@ pending/*
 *.log
 .env
 *.json
+# Secret configuration files
+src/config_secret.py
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.pyc
@@ -218,3 +220,4 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+src/config_secret.py

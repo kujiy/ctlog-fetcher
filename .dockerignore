@@ -1,3 +1,5 @@
+src/config_secret.py
+
 # Git related
 .git
 .gitignore

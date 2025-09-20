@@ -32,9 +32,10 @@ flowchart LR
 ## Setup Steps (General Overview)
 
 1. Start the MySQL server and create the `ct` database
-2. Start manager_api (API server)
-3. Start ui (UI server)
-4. Start `worker.py` on each worker node
+2. **Configure database connection**: Copy `src/config_secret.py.example` to `src/config_secret.py` and configure your MySQL connection URL
+3. Start manager_api (API server)
+4. Start ui (UI server)
+5. Start `worker.py` on each worker node
 
 ---
 
@@ -144,7 +145,7 @@ bash start-worker-python.sh <your-public-name>
 `<your-public-name>`: This is the name displayed on the dashboard. If omitted, it will be auto-generated.
 
 Dashboard
-http://ctlog-fetcher.tplinkdns.com:1174/
+${DASHBOARD_URL} in `src.config.py`
 
 ## Support
 - If you have trouble with setup or operation, please contact the developer
