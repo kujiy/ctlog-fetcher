@@ -2,9 +2,10 @@
 import glob
 import argparse
 import sys, os
-from typing import List
+from typing import List, Tuple
 
-from src.worker.worker_base_models import CertCompareModel, PendingRequest, CompletedJob
+from src.manager_api.base_models import Categories
+from src.worker.worker_base_models import CertCompareModel, PendingRequest, CompletedJob, WorkerArgs
 from src.worker.worker_common_funcs import list_model_to_list_dict
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -102,7 +103,7 @@ def fetch_ct_log(ct_log_url, start, end, proxies=None, retry_stats=None, stop_ev
             raise
         return []
 
-def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval_sec):
+def worker_job_thread(category, task, args: WorkerArgs, global_tasks, ctlog_request_interval_sec):
     global status_lines
     log_name = task.get('log_name', '')
     current = task.get('start', 0)
@@ -294,8 +295,9 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
     return task.copy()
 
 
-def upload(args, category, ct_log_url, current, entries, failed_lock, jp_certs_buffer: List[CertCompareModel], last_uploaded_index, log_name,
-            worker_jp_count):
+def upload(args: WorkerArgs, category, ct_log_url, current, entries, failed_lock,
+           jp_certs_buffer: List[CertCompareModel], last_uploaded_index: int, log_name: str,
+           worker_jp_count: int) -> (List[CertCompareModel], int, int):
     # Parsing
     jp_certs: CertCompareModel = extract_jp_certs(entries, log_name, ct_log_url, args, current)
     if jp_certs:
@@ -412,7 +414,7 @@ def send_failed(args, log_name, ct_log_url, task, end, current, last_uploaded_in
 # --- Dedicated retry management thread ---
 
 # Generic retry file processing
-def process_pending_requests_files(args, file_glob="pending_*.json"):
+def process_pending_requests_files(args: WorkerArgs, file_glob="pending_*.json"):
     """
     Scan pending_*.json files and delete those whose requests succeed.
     """
@@ -459,7 +461,7 @@ def process_pending_requests_files(args, file_glob="pending_*.json"):
 
 
 
-def retry_manager_unified(args):
+def retry_manager_unified(args: WorkerArgs):
     """Unified retry manager for ThreadPoolExecutor"""
     logger.debug("Starting unified retry manager")
     my_stop_event = get_stop_event()
@@ -526,7 +528,7 @@ def handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, task_re
 
 
 
-def category_job_manager(category, args, global_tasks, my_stop_event):
+def category_job_manager(category, args: WorkerArgs, global_tasks, my_stop_event):
     logger.debug(f"category_job_manager: {category} ident={threading.get_ident()}")
     """Manager to sequentially fetch and execute jobs for each category (ThreadPoolExecutor version)"""
     last_job = None
@@ -678,13 +680,13 @@ def default_worker_name():
     num = h % 10000
     return f"{w1}-{w2}-{num:04d}"
 
-def category_job_manager_with_wrapper(category, args, global_tasks, stop_event):
+def category_job_manager_with_wrapper(category, args: WorkerArgs, global_tasks, stop_event):
     register_stop_event(stop_event)
     category_job_manager(category, args, global_tasks, stop_event)
 
 
 # --- Category Watcher Thread ---
-def category_thread_manager(args, executor, category_thread_info):
+def category_thread_manager(args: WorkerArgs, executor, category_thread_info):
     """
     Periodically call /api/worker/categories and manage the increase/decrease of category threads.
     category_thread_info: { (category, idx): {"thread": future, "stop_event": event} }
@@ -768,7 +770,7 @@ def fetch_categories(domain: str, worker_name: str) -> (Counter, List[str]):
     return desired_counts, all_categories
 
 
-def main(args):
+def main(args: WorkerArgs):
     global status_lines, global_tasks
     categories = list(CT_LOG_ENDPOINTS.keys())
     status_lines = {}
@@ -865,7 +867,7 @@ def get_console_refresh_time(start_time):
         return 120
 
 
-def update_console_screen(args, handle_terminate, status_lines):
+def update_console_screen(args: WorkerArgs, handle_terminate, status_lines):
     # Main loop for top-like progress display
     start_time = time.time()
     try:
@@ -942,7 +944,7 @@ def update_console_message(status_lines, category, log_name, req_count, current,
         f"[{category}] 🌐 Req: {req_count} | 📍 Index: {current} | 🇯🇵 Domain: {worker_jp_count}({jp_ratio*100:.2f}%) | Progress: {progress_pct:.2f}% | ⏱️ ETA: {eta_str} {face} | {omikuji}{retry_str}"
     )
 
-def report_worker_error(args, **kwargs):
+def report_worker_error(args: WorkerArgs, **kwargs):
     payload = dict(**kwargs)
     payload["args"] = str(args)
     print("payload")
@@ -952,7 +954,7 @@ def report_worker_error(args, **kwargs):
         logger.warning(f"[worker_error] failed to report error: {post_e}")
 
 
-def extract_jp_certs(entries, log_name, ct_log_url, args, current) -> List[CertCompareModel]:
+def extract_jp_certs(entries, log_name, ct_log_url, args: WorkerArgs, current) -> List[CertCompareModel]:
     jp_certs = []
     parser = JPCertificateParser()
     for i, entry in enumerate(entries):
@@ -1054,7 +1056,7 @@ def upload_jp_certs(args, category, current, jp_certs: List[CertCompareModel], f
 
 # --- send_ping: moved above worker_job_thread ---
 # Send a ping to the manager API to report progress and get updated intervals
-def send_ping(args, category, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, last_ping_time, status="running", default_ping_seconds=180, default_ctlog_request_interval_sec=1, max_retry_after=0, total_retries=0):
+def send_ping(args: WorkerArgs, category, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, last_ping_time, status="running", default_ping_seconds=180, default_ctlog_request_interval_sec=1, max_retry_after=0, total_retries=0):
     """
     The interval for sending pings is controlled by the API response's ping_interval_sec/ctlog_request_interval_sec.
     The number of failed_files and pending_files is included as query parameters.
@@ -1163,7 +1165,7 @@ Each CT Log API applies rate limits per public IP address.
 Adding proxies can speed things up, but it costs money and puts a load on the CT Log API, so please don't overdo it.
 PYTHONPATH=. python worker.py --proxy http://<your-proxy-url-1> --proxy http://<your-proxy-url-2> --worker-name <your-nick-name>
 '''
-def get_args():
+def get_args() -> WorkerArgs:
     # Get default values from environment variables
     proxies_env = os.environ.get('PROXIES')
     worker_name_env = os.environ.get('WORKER_NAME')
@@ -1209,7 +1211,14 @@ def get_args():
         args.proxies = [p.strip() for p in proxies_env.split(',') if p.strip()]
     else:
         args.proxies = None
-    return args
+    return WorkerArgs(
+        proxies=args.proxies,
+        worker_name=args.worker_name,
+        manager=args.manager,
+        debug=args.debug,
+        max_threads=args.max_threads
+    )
+
 
 
 def validate_worker_name(worker_name):
