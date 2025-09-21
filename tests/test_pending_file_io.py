@@ -5,6 +5,7 @@ import shutil
 import uuid
 import pytest
 
+from src.worker.worker_base_models import PendingRequest
 from src.worker.worker_error_handlings import save_pending_request
 from src.worker.worker_retry_job import process_pending_requests_files
 
@@ -27,7 +28,7 @@ def clear_pending_files():
 
 def test_save_pending_request_creates_file():
     clear_pending_files()
-    req = {"url": "http://example.com", "method": "POST", "data": {"foo": "bar"}}
+    req = PendingRequest(**{"url": "http://example.com", "method": "POST", "data": {"foo": "bar"}})
     save_pending_request(req, "pending_test")
     files = glob.glob("pending/pending_test_*.json")
     assert len(files) == 1
@@ -37,7 +38,7 @@ def test_save_pending_request_creates_file():
 
 def test_process_pending_requests_files_removes_on_success(monkeypatch):
     clear_pending_files()
-    req = {"url": "http://example.com", "method": "POST", "data": {"foo": "bar"}}
+    req = PendingRequest(**{"url": "http://example.com", "method": "POST", "data": {"foo": "bar"}})
     save_pending_request(req, "pending_test")
     files = glob.glob("pending/pending_test_*.json")
     assert len(files) == 1
@@ -51,7 +52,7 @@ def test_process_pending_requests_files_removes_on_success(monkeypatch):
 
 def test_process_pending_requests_files_keeps_on_failure(monkeypatch):
     clear_pending_files()
-    req = {"url": "http://example.com", "method": "POST", "data": {"foo": "bar"}}
+    req = PendingRequest(**{"url": "http://example.com", "method": "POST", "data": {"foo": "bar"}})
     save_pending_request(req, "pending_test")
     files = glob.glob("pending/pending_test_*.json")
     assert len(files) == 1

@@ -39,7 +39,7 @@ async def test_upload_cert_ct_log_timestamp(monkeypatch, tmp_path):
     # Call upload_certificates
     async with async_session() as session:
         result = await upload_certificates(payload, db=session)
-        assert result["inserted"] == 1
+        assert result.inserted == 1
 
         # Query the Cert table
         stmt = select(Cert).order_by(Cert.id.desc())
@@ -103,7 +103,7 @@ async def test_upload_cert_ct_log_timestamp__weekend(monkeypatch, tmp_path):
     # Call upload_certificates
     async with async_session() as session:
         result = await upload_certificates(payload, db=session)
-        assert result["inserted"] == 1
+        assert result.inserted == 1
 
         # Query the Cert table
         stmt = select(Cert).order_by(Cert.id.desc())
@@ -148,7 +148,7 @@ async def test_upload_cert_ct_log_timestamp__night(monkeypatch, tmp_path):
     # Call upload_certificates
     async with async_session() as session:
         result = await upload_certificates(payload, db=session)
-        assert result["inserted"] == 1
+        assert result.inserted == 1
 
         # Query the Cert table
         stmt = select(Cert).order_by(Cert.id.desc())

@@ -109,7 +109,7 @@ async def test_worker_ping(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_worker_completed(monkeypatch):
-    async def fake_update_worker_status_and_summary(data, db, status):
+    async def fake_update_worker_status_and_summary(data, db, status, request):
         return {"message": "ok"}
     monkeypatch.setattr("src.manager_api.routers.worker_pings.update_worker_status_and_summary", fake_update_worker_status_and_summary)
     payload = {

@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 # Import the functions we want to test
 from src.worker.worker import NeedTreeSizeException
 from src.worker.worker_ctlog import fetch_ct_log
-from src.worker.worker_common_funcs import sleep_with_stop_check
+from src.worker.worker_ctlog import sleep_with_stop_check
 
 
 class TestFetchCtLog:
@@ -30,8 +30,8 @@ class TestFetchCtLog:
         self.end = 10
         self.retry_stats = {'total_retries': 0, 'max_retry_after': 0}
 
-    @mock.patch('src.worker.worker.requests.get')
-    @mock.patch('src.worker.worker.sleep_with_stop_check')
+    @mock.patch('src.worker.worker_ctlog.requests.get')
+    @mock.patch('src.worker.worker_ctlog.sleep_with_stop_check')
     def test_successful_fetch(self, mock_sleep, mock_get):
         """Test successful fetch of CT log entries."""
         # Mock successful response
@@ -56,8 +56,8 @@ class TestFetchCtLog:
         assert self.retry_stats['max_retry_after'] == 0
         mock_sleep.assert_not_called()
 
-    @mock.patch('src.worker.worker.requests.get')
-    @mock.patch('src.worker.worker.sleep_with_stop_check')
+    @mock.patch('src.worker.worker_ctlog.requests.get')
+    @mock.patch('src.worker.worker_ctlog.sleep_with_stop_check')
     def test_rate_limit_retry_with_header(self, mock_sleep, mock_get):
         """Test handling of 429 rate limit with Retry-After header."""
         # Mock rate-limited response with Retry-After header
@@ -82,8 +82,8 @@ class TestFetchCtLog:
         assert self.retry_stats['max_retry_after'] == 10
         mock_sleep.assert_called_once_with(10, self.stop_event)
 
-    @mock.patch('src.worker.worker.requests.get')
-    @mock.patch('src.worker.worker.sleep_with_stop_check')
+    @mock.patch('src.worker.worker_ctlog.requests.get')
+    @mock.patch('src.worker.worker_ctlog.sleep_with_stop_check')
     def test_rate_limit_retry_without_header(self, mock_sleep, mock_get):
         """Test handling of 429 rate limit without Retry-After header."""
         # Mock rate-limited response without Retry-After header
@@ -108,8 +108,8 @@ class TestFetchCtLog:
         assert self.retry_stats['max_retry_after'] == 5  # Default is 5 seconds
         mock_sleep.assert_called_once_with(5, self.stop_event)
 
-    @mock.patch('src.worker.worker.requests.get')
-    @mock.patch('src.worker.worker.sleep_with_stop_check')
+    @mock.patch('src.worker.worker_ctlog.requests.get')
+    @mock.patch('src.worker.worker_ctlog.sleep_with_stop_check')
     def test_multiple_rate_limits(self, mock_sleep, mock_get):
         """Test handling of multiple rate limits with different wait times."""
         # Setup retry_stats
@@ -156,8 +156,8 @@ class TestFetchCtLog:
             mock.call(8, self.stop_event),
         ])
 
-    @mock.patch('src.worker.worker.requests.get')
-    @mock.patch('src.worker.worker.sleep_with_stop_check')
+    @mock.patch('src.worker.worker_ctlog.requests.get')
+    @mock.patch('src.worker.worker_ctlog.sleep_with_stop_check')
     def test_need_tree_size_exception(self, mock_sleep, mock_get):
         """Test handling of 'need tree size' error (400)."""
         # Mock need tree size response
@@ -182,8 +182,8 @@ class TestFetchCtLog:
         assert self.retry_stats['max_retry_after'] == 0
         mock_sleep.assert_not_called()
 
-    @mock.patch('src.worker.worker.requests.get')
-    @mock.patch('src.worker.worker.sleep_with_stop_check')
+    @mock.patch('src.worker.worker_ctlog.requests.get')
+    @mock.patch('src.worker.worker_ctlog.sleep_with_stop_check')
     def test_other_error_codes(self, mock_sleep, mock_get):
         """Test handling of other error codes."""
         # Mock other error response
@@ -207,8 +207,8 @@ class TestFetchCtLog:
         assert self.retry_stats['max_retry_after'] == 0
         mock_sleep.assert_called_once_with(5, self.stop_event)
 
-    @mock.patch('src.worker.worker.requests.get')
-    @mock.patch('src.worker.worker.sleep_with_stop_check')
+    @mock.patch('src.worker.worker_ctlog.requests.get')
+    @mock.patch('src.worker.worker_ctlog.sleep_with_stop_check')
     def test_request_exception(self, mock_sleep, mock_get):
         """Test handling of request exceptions."""
         # Mock request exception
@@ -230,7 +230,7 @@ class TestFetchCtLog:
         assert self.retry_stats['max_retry_after'] == 0
         mock_sleep.assert_not_called()
 
-    @mock.patch('src.worker.worker.requests.get')
+    @mock.patch('src.worker.worker_ctlog.requests.get')
     def test_proxy_handling_single(self, mock_get):
         """Test handling of a single proxy."""
         # Set up a single proxy
@@ -258,7 +258,7 @@ class TestFetchCtLog:
         assert kwargs['proxies'] == proxy
 
     @mock.patch('src.worker.worker.random.choice')
-    @mock.patch('src.worker.worker.requests.get')
+    @mock.patch('src.worker.worker_ctlog.requests.get')
     def test_proxy_handling_multiple(self, mock_get, mock_choice):
         """Test handling of multiple proxies."""
         # Set up multiple proxies

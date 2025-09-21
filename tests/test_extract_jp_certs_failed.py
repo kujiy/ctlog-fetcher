@@ -84,11 +84,10 @@ class TestExtractJpCertsFailed(unittest.TestCase):
         with patch('src.worker.worker.report_worker_error', side_effect=capture_error):
             jp_certs = extract_jp_certs(
                 entries=entries,
-                log_name=log_name,
-                ct_log_url=ct_log_url,
-                args=args,
-                my_ip=my_ip,
-                current=current
+                log_name=self.log_name,
+                ct_log_url=self.ct_log_url,
+                args=self.args,
+                current=self.current
             )
             batch_jp_count = len(jp_certs)
             batch_total_count = len(entries)

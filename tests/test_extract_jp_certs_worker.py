@@ -18,12 +18,12 @@ def test_extract_jp_certs_worker():
     ct_log_url = 'https://ct.googleapis.com/logs/eu1/xenon2025h1/'
     my_ip = '127.0.0.1'
     current = 0
-    jp_certs = extract_jp_certs(entries, log_name, ct_log_url, args, my_ip, current)
+    jp_certs = extract_jp_certs(entries, log_name, ct_log_url, args, current)
     assert isinstance(jp_certs, list)
     batch_jp_count = len(jp_certs)
     batch_total_count = len(entries)
     assert batch_jp_count > 0
     assert batch_total_count == len(entries)
     for cert in jp_certs:
-        assert cert['common_name'].endswith('.jp')
+        assert cert.common_name.endswith('.jp')
     print(f"Extracted {batch_jp_count} .jp certs from {batch_total_count} entries.")
