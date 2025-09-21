@@ -609,6 +609,12 @@ def category_job_manager(category, args, global_tasks, my_stop_event):
             if my_stop_event.is_set():
                 break
 
+            # # debug
+            # task = {'ct_log_url': 'https://ct.googleapis.com/logs/argon2023/', 'ctlog_request_interval_sec': 1, 'end': 708782077,
+            #  'ip_address': '12ca17b', 'log_name': 'argon2023', 'start': 708782077, 'sth_end': 1602372213}
+            # task = {'ct_log_url': 'https://ct.googleapis.com/logs/us1/argon2024/', 'ctlog_request_interval_sec': 1, 'end': 100329307,
+            # 'ip_address': '12ca17b', 'log_name': 'argon2024', 'start': 100329307, 'sth_end': 1602372213}
+
             # Generate a worker_job_thread for each category
             try:
                 completed_task = worker_job_thread(category, task, args, global_tasks, ctlog_request_interval_sec)
@@ -1027,7 +1033,7 @@ def upload_jp_certs(args, category, current, jp_certs, failed_lock):
             if resp.status_code == 200:
                 last_uploaded_index = current
             else:
-                logger.warning(f"[{category}] Upload failed: {resp.status_code} {resp.text}")
+                logger.warning(f"[{category}] Upload failed: {resp.status_code} {url} {resp.text}")
                 with failed_lock:
                     save_pending_request({
                         "url": url,
