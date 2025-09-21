@@ -11,7 +11,7 @@ from src.manager_api.models import CTLogSTH, WorkerStatus, LogFetchProgress
 from src.config import CT_LOG_ENDPOINTS, LOG_FETCH_PROGRESS_TTL, \
     WORKER_CTLOG_REQUEST_INTERVAL_SEC, ORDERED_CATEGORIES, STH_FETCH_INTERVAL_SEC
 from src.share.job_status import JobStatus
-from src.manager_api.base_models import WorkerResumeRequestModel, NextTask
+from src.manager_api.base_models import WorkerResumeRequestModel, NextTask, Categories, NextTaskCompleted
 from cachetools import TTLCache
 from asyncache import cached
 from src.share.logger import logger
@@ -50,10 +50,10 @@ async def get_worker_categories(
     ## we had too many dead workers by this unstable ordered_categories adjustment, so we disable it for now.
     # ordered_categories = await ddos_adjuster(db, ordered_categories)
 
-    return {
-        "all_categories": all_categories,
-        "ordered_categories": ordered_categories
-    }
+    return Categories(
+        all_categories=all_categories,
+        ordered_categories=ordered_categories
+    )
 #
 # # DDoS adjuster: limit number of categories according to number of running workers
 # async def ddos_adjuster(db, ordered_categories):
@@ -76,7 +76,7 @@ async def get_next_task(
     worker_name: str = Query("default"),
     category: str = Query(...),
     db=Depends(get_async_session)
-) -> NextTask | dict:
+) -> NextTask | NextTaskCompleted:
     if not worker_name:
         worker_name = "default"  # somehow Query default doesn't work
     ip_address_hash = extract_ip_address_hash(request)
@@ -128,7 +128,7 @@ async def get_next_task(
                 if res:
                     return res
         # If all logs are collected, return sleep instruction to worker
-        return {"message": "all logs completed", "sleep_sec": 600}
+        return NextTaskCompleted(message="all logs completed", sleep_sec=600)
 
     # # Temporary hardcoded: list of ranges where .jp domains can be obtained
     # hardcoded_jobs = [

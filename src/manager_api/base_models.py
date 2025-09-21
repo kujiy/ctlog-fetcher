@@ -125,3 +125,38 @@ class NextTask(BaseModel):
     ip_address: Optional[str] = Field(None, max_length=64)
     ctlog_request_interval_sec: int = Field(..., gt=0)  # 1 sec to 1 hour
 
+class NextTaskCompleted(BaseModel):
+    message: str
+    slee_sec: int
+
+class Categories(BaseModel):
+    all_categories: List[str]
+    ordered_categories: List[str]
+
+class PingResponse(BaseModel):
+    """
+     {
+        "ping_interval_sec": WORKER_PING_INTERVAL_SEC,
+        "ctlog_request_interval_sec": await get_ctlog_request_interval_sec(db, data.log_name, extract_ip_address_hash(request)),
+        "overdue_threshold_sec": 60 * 60,  # worker time limit: 60 minutes
+        "overdue_task_sleep_sec": 60 * 30,  # 30 minutes
+        "kill_me_now_then_sleep_sec": 0,# >0 means the worker should exit right now, then sleep this seconds before exit
+    }
+    """
+    ping_interval_sec: int
+    ctlog_request_interval_sec: int
+    overdue_threshold_sec: int
+    overdue_task_sleep_sec: int
+    kill_me_now_then_sleep_sec: int
+
+
+class SimpleResponse(BaseModel):
+    message: str
+
+class FailedResponse(BaseModel):
+    failed_sleep_sec: int
+
+
+class UploadResponse(BaseModel):
+    inserted: int
+    skipped_duplicates: int

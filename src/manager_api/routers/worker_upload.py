@@ -12,7 +12,7 @@ from src.manager_api import locks
 from src.manager_api.models import Cert
 from src.share.cert_parser import JPCertificateParser
 from typing import List
-from src.manager_api.base_models import UploadCertItem
+from src.manager_api.base_models import UploadCertItem, UploadResponse
 import datetime as dt
 from src.share.logger import logger
 
@@ -22,7 +22,7 @@ router = APIRouter()
 async def upload_certificates(
     items: List[UploadCertItem],
     db=Depends(get_async_session)
-):
+) -> UploadResponse:
     logger.debug(f"[upload_certificates] Received {len(items)} items for upload")
     inserted = 0
     skipped_duplicates = 0
@@ -120,7 +120,7 @@ async def upload_certificates(
                     await cert_cache.add(cert.issuer, cert.serial_number, cert.certificate_fingerprint_sha256)
         except Exception as e:
             await save_failed(e, items)
-            return {"inserted": 0, "skipped_duplicates": 0}
+            return UploadResponse(inserted=0, skipped_duplicates=0)
 
     # Output cache statistics to log (for debugging)
     if logger.isEnabledFor(logging.DEBUG):
@@ -130,7 +130,7 @@ async def upload_certificates(
                     f"misses={cache_stats['miss_count']}")
 
     logger.debug(f"[upload_certificates] Result: inserted={inserted}, skipped_duplicates={skipped_duplicates}")
-    return {"inserted": inserted, "skipped_duplicates": skipped_duplicates}
+    return UploadResponse(inserted=inserted, skipped_duplicates=skipped_duplicates)
 
 
 async def save_failed(e, items):
