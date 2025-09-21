@@ -4,7 +4,7 @@ import argparse
 import sys, os
 from typing import List, Tuple
 
-from src.manager_api.base_models import Categories
+from src.manager_api.base_models import Categories, WorkerPingBaseModel
 from src.worker.worker_base_models import CertCompareModel, PendingRequest, CompletedJob, WorkerArgs
 from src.worker.worker_common_funcs import list_model_to_list_dict
 
@@ -1056,7 +1056,9 @@ def upload_jp_certs(args, category, current, jp_certs: List[CertCompareModel], f
 
 # --- send_ping: moved above worker_job_thread ---
 # Send a ping to the manager API to report progress and get updated intervals
-def send_ping(args: WorkerArgs, category, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, last_ping_time, status="running", default_ping_seconds=180, default_ctlog_request_interval_sec=1, max_retry_after=0, total_retries=0):
+def send_ping(
+        args: WorkerArgs, category, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, last_ping_time, status="running", default_ping_seconds=180, default_ctlog_request_interval_sec=1, max_retry_after=0, total_retries=0
+) -> (int, int, int, int, int, int):
     """
     The interval for sending pings is controlled by the API response's ping_interval_sec/ctlog_request_interval_sec.
     The number of failed_files and pending_files is included as query parameters.
@@ -1069,27 +1071,26 @@ def send_ping(args: WorkerArgs, category, log_name, ct_log_url, task, end, curre
     now = time.time()
     if now - last_ping_time >= default_ping_seconds:
         jp_ratio = (worker_jp_count / worker_total_count) if worker_total_count > 0 else 0
-        ping_data = {
-            "worker_name": args.worker_name,
-            "log_name": log_name,
-            "ct_log_url": ct_log_url,
-            "start": task.get('start'),
-            "end": end,
-            "current": current,
-            "worker_total_count": worker_total_count,
-            "last_uploaded_index": last_uploaded_index,
-            "status": status,
-            "jp_count": worker_jp_count,
-            "jp_ratio": jp_ratio,
-            "max_retry_after": max_retry_after,
-            "total_retries": total_retries
-        }
+        ping_data = WorkerPingBaseModel(
+            worker_name=args.worker_name,
+            log_name=log_name,
+            ct_log_url=ct_log_url,
+            start=task.get('start'),
+            end=end,
+            current=current,
+            last_uploaded_index=last_uploaded_index,
+            status=status,
+            jp_count=worker_jp_count,
+            jp_ratio=jp_ratio,
+            total_retries=total_retries,
+            max_retry_after=max_retry_after,
+        )
         failed_files = len([f for f in os.listdir(FAILED_FILE_DIR) if os.path.isfile(os.path.join(FAILED_FILE_DIR, f))])
         pending_files = len([f for f in os.listdir(PENDING_FILE_DIR) if os.path.isfile(os.path.join(PENDING_FILE_DIR, f))])
         url = f"{args.manager}/api/worker/ping?failed_files={failed_files}&pending_files={pending_files}"
 
         try:
-            resp = requests.post(url, json=ping_data)
+            resp = requests.post(url, json=ping_data.dict())
             last_ping_time = now
             if resp.status_code == 200:
                 try:
