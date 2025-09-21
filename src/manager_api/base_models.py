@@ -160,7 +160,7 @@ class SimpleResponse(BaseModel):
     message: str
 
 class FailedResponse(BaseModel):
-    failed_sleep_sec: int
+    failed_sleep_sec: int = 120
 
 
 class UploadResponse(BaseModel):

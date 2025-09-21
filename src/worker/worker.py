@@ -2,12 +2,13 @@
 import glob
 import argparse
 import sys, os
-from typing import List, Tuple
+from typing import List, Tuple, Optional, Dict
 
 from retry import retry
 
-from src.manager_api.base_models import Categories, WorkerPingBaseModel
-from src.worker.worker_base_models import CertCompareModel, PendingRequest, WorkerArgs
+from src.manager_api.base_models import Categories, WorkerPingBaseModel, NextTaskCompleted, NextTask, WorkerNextTask, \
+    FailedResponse, WorkerResumeRequestModel
+from src.worker.worker_base_models import CertCompareModel, PendingRequest, WorkerArgs, CategoryThreadInfo, ThreadInfo
 from src.worker.worker_common_funcs import list_model_to_list_dict
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -105,35 +106,32 @@ def fetch_ct_log(ct_log_url, start, end, proxies=None, retry_stats=None, stop_ev
             raise
         return []
 
-def worker_job_thread(category, task, args: WorkerArgs, global_tasks, ctlog_request_interval_sec):
+def worker_job_thread(
+    category: str, task: WorkerNextTask, args: WorkerArgs, global_tasks: Dict[str, WorkerNextTask], ctlog_request_interval_sec
+) -> Optional[WorkerNextTask]:
     global status_lines
-    log_name = task.get('log_name', '')
-    current = task.get('start', 0)
-    end = task.get('end', 0)
-    logger.debug(f"[DEBUG] Start job: category={category} log_name={log_name} start={current} end={end}")
     proxies = args.proxies if args.proxies else None
     failed_uploads = []
     failed_lock = threading.Lock()
-    ct_log_url = task.get('ct_log_url', '')
-    # Add all necessary information to the task
-    task = task.copy()
-    task["manager"] = args.manager
-    task["worker_name"] = args.worker_name
-    task["log_name"] = log_name
-    task["ct_log_url"] = ct_log_url
-    task["start"] = task.get('start')
-    task["end"] = end
-    task["status"] = JobStatus.RUNNING.value
+
+    task = WorkerNextTask(**task.dict())  # copy
+    log_name = task.log_name
+    current = task.start
+    end = task.end
+    ct_log_url = task.ct_log_url
+
+    logger.debug(f"[DEBUG] Start job: category={category} log_name={log_name} start={current} end={end}")
     jobkey = f"{category}_{log_name}_{current}_{end}"
     global_tasks[jobkey] = task
+
     omikuji_list = ["大吉", "中吉", "小吉", "吉", "末吉", "凶"]
     req_count = 0
-    last_ping_time = 0
-    start_time = time.time()
+    last_ping_time = now = time.time()
     last_uploaded_index = None
     empty_entries_count = 0
     worker_jp_count = 0
     worker_total_count = 0
+
     # start time
     start_time = time.time()
     overdue_threshold_sec = 60 * 60  # 60 minutes
@@ -244,7 +242,7 @@ def worker_job_thread(category, task, args: WorkerArgs, global_tasks, ctlog_requ
 
             # if the entry is empty, it may loop infinitely, but it will break with empty_entries_count, so it's okay
             current += actual_entry_size
-            task["current"] = current
+            task.current = current
 
         # Upload the remaining jp_certs anyway at the end of the job
         if jp_certs_buffer:
@@ -259,7 +257,7 @@ def worker_job_thread(category, task, args: WorkerArgs, global_tasks, ctlog_requ
             error_type="worker_job_thread_error",
             error_message=str(e),
             traceback_str=_tb + "---\n" + str(_exc),
-            task=task,
+            task=task.json(),
         )
         return None
 
@@ -274,27 +272,27 @@ def worker_job_thread(category, task, args: WorkerArgs, global_tasks, ctlog_requ
         return task.copy()
     if (current > end) or need_tree_size:
         console_msg = "✅ Completed!"
-        task["status"] = JobStatus.COMPLETED.value
-        global_tasks[jobkey]["status"] = JobStatus.COMPLETED.value
+        task.status = JobStatus.COMPLETED
+        global_tasks[jobkey].status = JobStatus.COMPLETED
         send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count,
                       retry_stats['max_retry_after'], retry_stats['total_retries'])
-        expect_total_count = end - task.get('start', 0) + 1
+        expect_total_count = end - task.start + 1
         fetched_rate = worker_total_count / expect_total_count
         status_lines[status_key] = (
-            f"[{category}] {console_msg} Commited {fetched_rate*100:.1f}% ({worker_total_count}/{expect_total_count}) | Range: {task['start']} - {task['end']}  | 🇯🇵 Domain: {worker_jp_count} | {random.choice(omikuji_list)}"
+            f"[{category}] {console_msg} Commited {fetched_rate*100:.1f}% ({worker_total_count}/{expect_total_count}) | Range: {task.start} - {task.end}  | 🇯🇵 Domain: {worker_jp_count} | {random.choice(omikuji_list)}"
         )
     else:
         # Show "❌ Failed." only for abnormal termination(including Ctrl+C)
         console_msg = "❌ Failed."
         send_resume(task, overdue, kill_me_now_then_sleep_sec)
-        expect_total_count = end - task.get('start', 0) + 1
+        expect_total_count = end - task.start + 1
         fetched_rate = worker_total_count / expect_total_count
         status_lines[status_key] = (
-            f"[{category}] {console_msg} Commited {fetched_rate*100:.1f}% ({worker_total_count}/{expect_total_count}) | Range: {task['start']} - {task['end']}  | 🇯🇵 Domain: {worker_jp_count} | {random.choice(omikuji_list)}"
+            f"[{category}] {console_msg} Commited {fetched_rate*100:.1f}% ({worker_total_count}/{expect_total_count}) | Range: {task.start} - {task.end}  | 🇯🇵 Domain: {worker_jp_count} | {random.choice(omikuji_list)}"
         )
 
     logger.debug(f"[DEBUG] Exit job: category={category} log_name={log_name} current={current} end={end}")
-    return task.copy()
+    return WorkerNextTask(**task.dict())  # task.copy()
 
 
 def upload(args: WorkerArgs, category, ct_log_url, current, entries, failed_lock,
@@ -325,7 +323,7 @@ def save_pending_request(request_info: PendingRequest, prefix):
     fname = os.path.join(PENDING_FILE_DIR, filename)
 
     with open(fname, "w") as f:
-        request_info.json(indent=2)
+        f.write(request_info.json(indent=2))
 
 
 def pending_file_name(request_info, prefix):
@@ -343,12 +341,12 @@ def pending_file_name(request_info, prefix):
     return f"{prefix}_{timestamp}_{log_name_clean}_{worker_name_clean}_{uuid_short}.json"
 
 @retry(tries=10, delay=20, jitter=(1, 10))
-def send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, max_retry_after=0, total_retries=0):
+def send_completed(args, log_name, ct_log_url, task: WorkerNextTask, end, current, last_uploaded_index, worker_jp_count, worker_total_count, max_retry_after=0, total_retries=0):
     completed_data = WorkerPingBaseModel(
         worker_name=args.worker_name,
         log_name=log_name,
         ct_log_url=ct_log_url,
-        start=task.get('start'),
+        start=task.start,
         end=end,
         current=current,
         last_uploaded_index=last_uploaded_index,
@@ -360,9 +358,9 @@ def send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded
     )
     url = f"{args.manager}/api/worker/completed"
     try:
-        resp = requests.post(url, json=completed_data.dict(), timeout=180)
+        resp = requests.post(url, json=completed_data.dict(), timeout=1)
         resp.raise_for_status()
-        logger.debug(f"[worker] completed api - successfully sent: {log_name} range={task.get('start')}-{end}")
+        logger.debug(f"[worker] completed api - successfully sent: {log_name} range={task.start}-{end}")
     except Exception as e:
         logger.debug(f"[worker] failed to send completed api: {e}")
         save_pending_request(PendingRequest(
@@ -372,37 +370,30 @@ def send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded
         ), prefix="pending_completed")
 
 
-def send_failed(args, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, max_retry_after=0, total_retries=0):
-    data = {
-        "worker_name": args.worker_name,
-        "log_name": log_name,
-        "ct_log_url": ct_log_url,
-        "start": task.get('start'),
-        "end": end,
-        "current": current,
-        "worker_total_count": worker_total_count,
-        "last_uploaded_index": last_uploaded_index,
-        "status": JobStatus.FAILED.value,
-        "jp_count": worker_jp_count,
-        "jp_ratio": (worker_jp_count / worker_total_count) if worker_total_count > 0 else 0,
-        "max_retry_after": max_retry_after,
-        "total_retries": total_retries
-    }
+def send_failed(args, log_name, ct_log_url, task: WorkerNextTask, end, current, last_uploaded_index, worker_jp_count, worker_total_count, max_retry_after=0, total_retries=0):
+    data = WorkerPingBaseModel(
+        worker_name=args.worker_name,
+        log_name=log_name,
+        ct_log_url=ct_log_url,
+        start=task.start,
+        end=end,
+        current=current,
+        last_uploaded_index=last_uploaded_index,
+        status=JobStatus.FAILED.value,
+        jp_count=worker_jp_count,
+        jp_ratio=(worker_jp_count / worker_total_count) if worker_total_count > 0 else 0,
+        max_retry_after=max_retry_after,
+        total_retries=total_retries
+    )
     url = f"{args.manager}/api/worker/failed"
     try:
-        resp = requests.post(url, json=data, timeout=80)
-        if resp.status_code != 200:
-            # Log detailed API response for debugging
-            logger.debug(f"[worker] failed to send failed api: status={resp.status_code}")
-            logger.debug(f"[worker] failed api response body: {resp.text}")
-            logger.debug(f"[worker] failed api request data: {json.dumps(data, indent=2)}")
-            # ignore the request error
-        else:
-            logger.debug(f"[worker] failed api - successfully sent: {log_name} range={task.get('start')}-{end}")
+        resp = requests.post(url, json=data.dict(), timeout=80)
+        resp.raise_for_status()
+        logger.debug(f"[worker] failed api - successfully sent: {log_name} range={task.start}-{end}")
+        return FailedResponse(resp.json()).failed_sleep_sec
     except Exception as e:
         logger.debug(f"[worker] failed to send failed api: {e}")
-    failed_sleep_sec = resp.json().get('failed_sleep_sec', 120)
-    return failed_sleep_sec
+    return 120
 
 
 
@@ -471,65 +462,68 @@ def retry_manager_unified(args: WorkerArgs):
 
 
 
-def handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, task_ref, args=None):
+def handle_api_failure(
+    category: str, fail_count, last_job: Optional[NextTask | WorkerNextTask], MAX_FAIL, logger,
+        task_ref: List[WorkerNextTask], args=None
+) -> (bool, int, NextTask):
     status = None
     jobkey = None
     if last_job:
-        jobkey = f"{category}_{last_job.get('log_name','')}_{last_job.get('start',0)}_{last_job.get('end',0)}"
+        jobkey = f"{category}_{last_job.log_name}_{last_job.start}_{last_job.end}"
         global global_tasks
         if jobkey in global_tasks:
-            status = global_tasks[jobkey].get('status')
+            status = global_tasks[jobkey].status
         else:
-            status = last_job.get('status')
+            status = last_job.status
     logger.debug(f"fail_count: {fail_count}/{MAX_FAIL}, jobkey: {jobkey}, status: {status}")
     if fail_count >= MAX_FAIL and last_job:
-        batch_size = last_job["end"] - last_job["start"] + 1
-        if status != JobStatus.COMPLETED.value:
+        batch_size = last_job.end - last_job.start + 1
+        if status != JobStatus.COMPLETED:
             # If the job is incomplete, resume
             logger.warning(f"{category}: API failure/exception occurred {fail_count} times, resuming unfinished job (range: {last_job['start']}-{last_job['end']})")
-            resume_task = last_job.copy()
-            resume_task["current"] = resume_task["start"]
-            resume_task["status"] = JobStatus.RUNNING.value
+            resume_task = WorkerNextTask(**last_job.dict())  # copy
+            resume_task.current = resume_task.start
+            resume_task.status = JobStatus.RUNNING
             task_ref[0] = resume_task
             return True, 0, resume_task
         else:
             # If the job is complete, perform DNS check before generating the next range job
             if args is not None:
                 wait_for_manager_api_ready(args.manager)
-            sth_end = last_job.get("sth_end", last_job["end"])
-            if last_job["end"] + 1 >= sth_end:
+            sth_end = last_job.sth_end | last_job.end
+            if last_job.end + 1 >= sth_end:
                 # when reach the end, wait for sth_end to be updated
                 logger.warning(
-                    f"{category}: API failure/exception occurred {fail_count} times, but end+1 >= sth_end ({last_job['end']+1} >= {sth_end}). Sleeping n seconds before retrying."
+                    f"{category}: API failure/exception occurred {fail_count} times, but end+1 >= sth_end ({last_job.end + 1} >= {sth_end}). Sleeping n seconds before retrying."
                 )
                 sleep_with_stop_check(60 * 10, None)  # 1分スリープ
                 return False, fail_count, last_job
             else:
                 # 通常通り、ランダムな値を選択
-                next_start = random.randint(last_job["end"] + 1, sth_end) // 16000 * 16000  # pick a random start point aligned to 16000
+                next_start = random.randint(last_job.end + 1, sth_end) // 16000 * 16000  # pick a random start point aligned to 16000
             next_end = next_start + batch_size - 1
             if next_end > sth_end:
                 next_end = sth_end
             logger.warning(
                 f"{category}: API failure/exception occurred {fail_count} times, autonomously generating the next range job (next range: {next_start}-{next_end}): Autonomous recovery succeeded ✅")
-            new_task = last_job.copy()
-            new_task["start"] = next_start
-            new_task["current"] = next_start
-            new_task["end"] = next_end
-            new_task["status"] = JobStatus.RUNNING.value
+            new_task = NextTask(**last_job.dict())   # copy()
+            new_task.start = next_start
+            new_task.current = next_start
+            new_task.end = next_end
+            new_task.status = JobStatus.RUNNING
             task_ref[0] = new_task
             return True, 0, new_task
     return False, fail_count, last_job
 
 
 
-def category_job_manager(category, args: WorkerArgs, global_tasks, my_stop_event):
+def category_job_manager(category: str, args: WorkerArgs, global_tasks: Dict[str, WorkerNextTask], my_stop_event):
     logger.debug(f"category_job_manager: {category} ident={threading.get_ident()}")
     """Manager to sequentially fetch and execute jobs for each category (ThreadPoolExecutor version)"""
-    last_job = None
+    last_job: WorkerNextTask = None
     fail_count = 0
     MAX_FAIL = 6
-    task = None
+    task: NextTask | NextTaskCompleted = None
     ctlog_request_interval_sec = 1
 
     try:
@@ -544,20 +538,32 @@ def category_job_manager(category, args: WorkerArgs, global_tasks, my_stop_event
                     # when the job is completed
                     if not task or "start" not in task:
                         # support the case where the API returns {"message": "all logs completed", "sleep_sec": ...}
-                        if isinstance(task, dict) and task.get("message") == "all logs completed":
-                            sleep_sec = int(task.get("sleep_sec", 600))
-                            logger.info(f"{category}: collected all log_names, sleeping for {sleep_sec} seconds")
-                            sleep_with_stop_check(sleep_sec, my_stop_event)
+                        if isinstance(task, dict):
+                            task = NextTaskCompleted(**task)
+                            if task.message == "all logs completed":
+                                sleep_sec = int(task.sleep_sec)
+                                logger.info(f"{category}: collected all log_names, sleeping for {sleep_sec} seconds")
+                                sleep_with_stop_check(sleep_sec, my_stop_event)
+                            else:
+                                logger.info(f"{category}: unexpected API response: no next job, waiting 60 seconds")
+                                sleep_with_stop_check(60, my_stop_event)
                         else:
                             logger.info(f"{category}: unexpected API response: no next job, waiting 60 seconds")
                             sleep_with_stop_check(60, my_stop_event)
                         continue
 
+                    # normal next task
+                    task = WorkerNextTask(
+                        **task,
+                        manager=args.manager,
+                        worker_name=args.worker_name,
+                        status=JobStatus.RUNNING.value,
+                    )
                     # Reset fail_count on successful retrieval
                     fail_count = 0
                     # Get ctlog_request_interval_sec from the next_task API (default to 1 if not present)
-                    ctlog_request_interval_sec = int(task.get("ctlog_request_interval_sec", 1))
-                    last_job = task.copy()
+                    ctlog_request_interval_sec = int(task.ctlog_request_interval_sec)
+                    last_job = WorkerNextTask(**task.dict())  # copy
                 else:
                     logger.debug(f"{category}: failed to get next_task: {resp.status_code}")
                     fail_count += 1
@@ -568,7 +574,7 @@ def category_job_manager(category, args: WorkerArgs, global_tasks, my_stop_event
                     result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, [task], args)
                     if result:
                         # task autonomous generation
-                        task = last_job.copy()
+                        task = WorkerNextTask(**last_job.dict())  # copy
                     else:
                         continue
             except requests.exceptions.RequestException as e:
@@ -578,7 +584,7 @@ def category_job_manager(category, args: WorkerArgs, global_tasks, my_stop_event
                 sleep_with_stop_check(1, my_stop_event)
                 result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, [task], args)
                 if result:
-                    task = last_job.copy()
+                    task = WorkerNextTask(**last_job.dict())  # copy
                 else:
                     continue
             except Exception as e:
@@ -599,7 +605,7 @@ def category_job_manager(category, args: WorkerArgs, global_tasks, my_stop_event
                 sleep_with_stop_check(1, my_stop_event)
                 result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, [task], args)
                 if result:
-                    task = last_job.copy()
+                    task = WorkerNextTask(**last_job.dict())  # copy
                 else:
                     continue
 
@@ -625,7 +631,7 @@ def category_job_manager(category, args: WorkerArgs, global_tasks, my_stop_event
                     error_type="category_job_manager_jobthread_error",
                     error_message=str(e),
                     traceback_str=_tb + "---\n" + str(_exc),
-                    task=task,
+                    task=task.json(),
                 )
                 completed_task = None
             if completed_task is not None:
@@ -651,15 +657,19 @@ def category_job_manager(category, args: WorkerArgs, global_tasks, my_stop_event
 
 
 
-def send_resume(info, kill_me_now_then_sleep_sec: int = 0, overdue=False):
+def send_resume(task: WorkerNextTask, kill_me_now_then_sleep_sec: int = 0, overdue=False):
     try:
-        requests.post(f"{info['manager']}/api/worker/resume_request?overdue={overdue}&kill_me_now_then_sleep_sec={kill_me_now_then_sleep_sec}", json={
-            "worker_name": info["worker_name"],
-            "log_name": info["log_name"],
-            "ct_log_url": info["ct_log_url"],
-            "start": info["start"],
-            "end": info["end"],
-        }, timeout=10)
+        requests.post(
+        f"{task.manager}/api/worker/resume_request?overdue={overdue}&kill_me_now_then_sleep_sec={kill_me_now_then_sleep_sec}",
+            json=WorkerResumeRequestModel(
+                worker_name=task.worker_name,
+                log_name=task.log_name,
+                ct_log_url=task.ct_log_url,
+                start=task.start,
+                end=task.end,
+            ).dict(),
+            timeout=10
+        )
     except Exception as e:
         logger.debug(f"Failed to send resume_request: {e}")
 
@@ -675,13 +685,13 @@ def default_worker_name():
     num = h % 10000
     return f"{w1}-{w2}-{num:04d}"
 
-def category_job_manager_with_wrapper(category, args: WorkerArgs, global_tasks, stop_event):
+def category_job_manager_with_wrapper(category: str, args: WorkerArgs, global_tasks: Dict[str, WorkerNextTask], stop_event):
     register_stop_event(stop_event)
     category_job_manager(category, args, global_tasks, stop_event)
 
 
 # --- Category Watcher Thread ---
-def category_thread_manager(args: WorkerArgs, executor, category_thread_info):
+def category_thread_manager(args: WorkerArgs, executor, category_thread_info: CategoryThreadInfo):
     """
     Periodically call /api/worker/categories and manage the increase/decrease of category threads.
     category_thread_info: { (category, idx): {"thread": future, "stop_event": event} }
@@ -689,8 +699,8 @@ def category_thread_manager(args: WorkerArgs, executor, category_thread_info):
     register_stop_event()
 
     my_stop_event = get_stop_event()
-    last_desired_counts = DEFAULT_CATEGORIES.copy()
-    last_all_categories = list(DEFAULT_CATEGORIES.keys())
+    last_desired_counts: Counter = DEFAULT_CATEGORIES.copy()
+    last_all_categories: List[str] = list(DEFAULT_CATEGORIES.keys())
     while not my_stop_event.is_set():
         try:
             desired_counts, all_categories = fetch_categories(args.manager, args.worker_name)
@@ -703,24 +713,25 @@ def category_thread_manager(args: WorkerArgs, executor, category_thread_info):
             pass
 
         # Use last successful values
-        desired_counts = last_desired_counts
-        all_categories = last_all_categories
+        desired_counts: Counter = last_desired_counts
+        all_categories: List[str] = last_all_categories
 
         # Get the current state of threads
         running_counts = {}
-        for (cat, idx), info in list(category_thread_info.items()):
+        info: ThreadInfo
+        for (cat, idx), info in list(category_thread_info.data.items()):
             # info["thread"] is the return value of ThreadPoolExecutor.submit (Future)
-            if info["thread"].done():
+            if info.thread.done():
                 # Remove finished threads
-                del category_thread_info[(cat, idx)]
+                del category_thread_info.data[(cat, idx)]
                 continue
             running_counts[cat] = running_counts.get(cat, 0) + 1
 
         # Immediately stop and remove threads for categories not in all_categories
-        for (cat, idx), info in list(category_thread_info.items()):
+        for (cat, idx), info in list(category_thread_info.data.items()):
             if cat not in all_categories:
-                info["stop_event"].set()
-                del category_thread_info[(cat, idx)]
+                info.stop_event.set()
+                del category_thread_info.data[(cat, idx)]
 
         # Thread scaling
         # 1. Increase
@@ -730,15 +741,15 @@ def category_thread_manager(args: WorkerArgs, executor, category_thread_info):
                 # Start new threads for categories such as google, digicert, etc.
                 stop_evt = threading.Event()
                 future = executor.submit(category_job_manager_with_wrapper, cat, args, global_tasks, stop_evt)
-                category_thread_info[(cat, i)] = {"thread": future, "stop_event": stop_evt}
+                category_thread_info.data[(cat, i)] = ThreadInfo(thread=future, stop_event=stop_evt)
                 time.sleep(1)
 
         # 2. Decrease
-        for (cat, idx), info in list(category_thread_info.items()):
+        for (cat, idx), info in list(category_thread_info.data.items()):
             desired = desired_counts.get(cat, 0)
             if idx >= desired:
                 # Stop instruction
-                info["stop_event"].set()
+                info.stop_event.set()
                 # No join (managed by ThreadPoolExecutor future)
 
         sleep_with_stop_check(WORKER_THREAD_MANAGER_INTERVAL_SEC)
@@ -774,7 +785,7 @@ def main(args: WorkerArgs):
 
     # --- Category thread management ---
     # Dictionary for managing category threads: (category, idx): {"thread": future, "stop_event": event}
-    category_thread_info = {}  # (category, idx): {"thread": future, "stop_event": event}
+    category_thread_info = CategoryThreadInfo(data={})  # (category, idx): {"thread": future, "stop_event": event}
 
     def handle_terminate(signum, frame):
         if getattr(handle_terminate, '_called', False):
@@ -788,7 +799,7 @@ def main(args: WorkerArgs):
 
         # Send resume requests for running jobs
         for category, task in global_tasks.items():
-            if task.get("status") == JobStatus.RUNNING.value and task.get("current", task["start"]) < task["end"]:
+            if task.status == JobStatus.RUNNING and task.current | task.start < task.end:
                 logger.info(f"Terminating {category}, sending resume_request API...")
                 send_resume(task)
 
@@ -902,15 +913,16 @@ def update_console_screen(args: WorkerArgs, handle_terminate, status_lines):
         handle_terminate(None, None)
 
 
-def update_console_message(status_lines, category, log_name, req_count, current, worker_jp_count, worker_total_count, end, task, start_time, omikuji, retry_count):
+def update_console_message(status_lines, category, log_name, req_count, current, worker_jp_count, worker_total_count, end,
+                           task: WorkerNextTask, start_time, omikuji, retry_count):
     # Clear status_lines if it gets too large
     if len(status_lines) > MAX_CONSOLE_LINES:
         status_lines.clear()
 
     retry_str = f" | ⏳Retry: {retry_count}" if retry_count > 0 else ""
     jp_ratio = (worker_jp_count / worker_total_count) if worker_total_count > 0 else 0
-    total_count = end - task.get('start', 0) + 1
-    done_count = current - task.get('start', 0)
+    total_count = end - task.start + 1
+    done_count = current - task.start
     progress_pct = (done_count / total_count) * 100 if total_count > 0 else 0
     elapsed = time.time() - start_time
     speed = done_count / elapsed if elapsed > 0 else 0
@@ -1052,7 +1064,7 @@ def upload_jp_certs(args, category, current, jp_certs: List[CertCompareModel], f
 # --- send_ping: moved above worker_job_thread ---
 # Send a ping to the manager API to report progress and get updated intervals
 def send_ping(
-        args: WorkerArgs, category, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, last_ping_time, status="running", default_ping_seconds=180, default_ctlog_request_interval_sec=1, max_retry_after=0, total_retries=0
+        args: WorkerArgs, category, log_name, ct_log_url, task: WorkerNextTask, end, current, last_uploaded_index, worker_jp_count, worker_total_count, last_ping_time, status="running", default_ping_seconds=180, default_ctlog_request_interval_sec=1, max_retry_after=0, total_retries=0
 ) -> (int, int, int, int, int, int):
     """
     The interval for sending pings is controlled by the API response's ping_interval_sec/ctlog_request_interval_sec.
@@ -1070,7 +1082,7 @@ def send_ping(
             worker_name=args.worker_name,
             log_name=log_name,
             ct_log_url=ct_log_url,
-            start=task.get('start'),
+            start=task.start,
             end=end,
             current=current,
             last_uploaded_index=last_uploaded_index,
@@ -1148,7 +1160,7 @@ def is_dns_active(parsed):
         return False
 
 
-global_tasks = {}
+global_tasks: Dict[str, WorkerNextTask] = {}
 command_description = f'''CT Log Fetcher
 
 Project details:
