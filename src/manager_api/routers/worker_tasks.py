@@ -24,7 +24,7 @@ router = APIRouter()
 @router.get("/api/worker/categories")
 async def get_worker_categories(
         worker_name: str = Query("default"),
-        db = Depends(get_async_session)
+        _db = Depends(get_async_session)
 ):
     #TODO: Use worker_name for rate limit avoidance
     """

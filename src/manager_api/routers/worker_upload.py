@@ -1,19 +1,20 @@
+import datetime as dt
 import json
 import logging
 import os
 import random
 from datetime import datetime
-from fastapi import Query, Depends, APIRouter
+from typing import List
+
+from fastapi import Depends, APIRouter
 from sqlalchemy.exc import IntegrityError
+
+from src.config import JST
+from src.manager_api.base_models import UploadCertItem, UploadResponse
 from src.manager_api.certificate_cache import cert_cache
-from src.config import JST, BATCH_SIZE
 from src.manager_api.db import get_async_session
-from src.manager_api import locks
 from src.manager_api.models import Cert
 from src.share.cert_parser import JPCertificateParser
-from typing import List
-from src.manager_api.base_models import UploadCertItem, UploadResponse
-import datetime as dt
 from src.share.logger import logger
 
 router = APIRouter()
@@ -37,7 +38,7 @@ async def upload_certificates(
             entry_dict = json.loads(item.ct_entry)
             cert_data = parser.parse_only_jp_cert(entry_dict)
         except Exception as e:
-            logger.debug(f"[upload_certificates] Error parsing CT entry for item: {item}")
+            logger.debug(f"[upload_certificates] Error parsing CT entry for item: {item} {e}")
             continue
         if not cert_data:
             continue
@@ -102,7 +103,7 @@ async def upload_certificates(
 
         except IntegrityError as e:
             # On duplicate error, process one by one
-            logger.debug(f"[upload_certificates] Batch insert failed due to duplicates, falling back to individual inserts")
+            logger.debug(f"[upload_certificates] Batch insert failed due to duplicates, falling back to individual inserts. {e}")
             await db.rollback()
             for cert in certs_to_insert:
                 try:

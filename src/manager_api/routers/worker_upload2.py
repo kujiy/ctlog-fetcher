@@ -37,7 +37,7 @@ async def upload_certificates2(
             entry_dict = json.loads(item.ct_entry)
             cert_data = parser.parse_only_jp_cert_to_cert2(entry_dict)
         except Exception as e:
-            logger.debug(f"[upload_certificates2] Error parsing CT entry for item: {item}")
+            logger.debug(f"[upload_certificates2] Error parsing CT entry for item: {item} *{e}")
             continue
         if not cert_data:
             continue
@@ -114,7 +114,7 @@ async def upload_certificates2(
 
         except IntegrityError as e:
             # On duplicate error, process one by one
-            logger.debug(f"[upload_certificates2] Batch insert failed due to duplicates, falling back to individual inserts")
+            logger.debug(f"[upload_certificates2] Batch insert failed due to duplicates, falling back to individual inserts. {e}")
             await db.rollback()
             for cert in certs_to_insert:
                 try:

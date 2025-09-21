@@ -1,38 +1,32 @@
 # FastAPI entry point template
-import os
+import asyncio
 import logging
-from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
 
+from fastapi import FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from prometheus_client import CollectorRegistry, multiprocess, generate_latest, CONTENT_TYPE_LATEST
 from starlette.requests import ClientDisconnect
 
-from .metrics import LatencySamplingMiddleware
-
-from .db import init_engine
-import asyncio
-from .certificate_cache import cert_cache
-from ..config import BACKGROUND_JOBS_ENABLED
-from prometheus_client import CollectorRegistry, multiprocess, generate_latest, CONTENT_TYPE_LATEST
-
+from src.manager_api.routers.ui_individual_pages import router as ui_individuals_router
+from src.manager_api.routers.ui_logs import router as ui_logs_router
 # routers
 from src.manager_api.routers.ui_status import router as ui_status_router
-from src.manager_api.routers.ui_logs import router as ui_logs_router
-from src.manager_api.routers.ui_individual_pages import router as ui_individuals_router
 from src.manager_api.routers.worker_pings import router as worker_pings_router
 from src.manager_api.routers.worker_tasks import router as worker_tasks_router
 from src.manager_api.routers.worker_upload import router as worker_upload_router
-
+from .background_jobs.log_fetch_progress import start_log_fetch_progress
+from .background_jobs.log_fetch_snapshot_job import start_log_fetch_snapshot_job
+from .background_jobs.pending_failure_uploader import start_pending_failure_uploader
 # background jobs
 from .background_jobs.sth_fetcher import start_sth_fetcher
-from .background_jobs.worker_liveness import start_worker_liveness_monitor
-from .background_jobs.log_fetch_progress import start_log_fetch_progress
 from .background_jobs.unique_cert_counter import start_unique_cert_counter
-from .background_jobs.log_fetch_snapshot_job import start_log_fetch_snapshot_job
+from .background_jobs.worker_liveness import start_worker_liveness_monitor
 from .background_jobs.worker_status_aggs import start_worker_status_aggs
-from .background_jobs.pending_failure_uploader import start_pending_failure_uploader
-
-
+from .certificate_cache import cert_cache
+from .db import init_engine
+from .metrics import LatencySamplingMiddleware
+from ..config import BACKGROUND_JOBS_ENABLED
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 logger = app.logger = logging.getLogger("manager_api")
@@ -115,7 +109,7 @@ async def on_startup():
             app.state.background_tasks.append(start_pending_failure_uploader())  # 7️⃣
             logger.info("✅ Background jobs started and tasks stored in app.state.background_tasks")
             app.state.background_jobs_lock_file = lock_file
-        except (IOError, OSError) as e:
+        except (IOError, OSError):
             logger.warning(f"▶️ Background jobs already running in another process (lock file: {lock_file_path})")
             try:
                 lock_file.close()

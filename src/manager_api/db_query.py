@@ -14,7 +14,7 @@ async def get_running_thread_count(db):
     total_running_count = (await db.execute(stmt_count)).scalar_one()
     return total_running_count
 
-# get complted thread count last an hour
+# get completed thread count last an hour
 @cached(TTLCache(maxsize=1, ttl=300))
 async def get_completed_thread_count_last_min(db, min: int) -> int:
     from datetime import datetime, timedelta

@@ -38,8 +38,6 @@ class WorkerPingBaseModel(BaseModel):
 
 
 class WorkerPingModel(WorkerPingBaseModel):
-    pass
-class WorkerPingModel(WorkerPingBaseModel):
     status: JobStatus = Field(...)
 
 

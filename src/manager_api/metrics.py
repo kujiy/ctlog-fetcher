@@ -7,14 +7,13 @@ from prometheus_client import Histogram
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
-from src.share.logger import logger
 
 SAMPLE_RATE = float(os.getenv("SAMPLE_RATE", "0.1"))  # Record only 10%
 ALWAYS_RECORD_OVER = float(os.getenv("ALWAYS_RECORD_OVER_SECONDS", "10"))  # Always record if over 10 seconds
 
 EXCLUDE_PATHS = (
     "/metrics",
-    "/healthz",
+    "/health",
     # "/api/worker/next_task",
     "/api/logs_summary",
     "/api/logs_progress",

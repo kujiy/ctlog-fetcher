@@ -1,20 +1,20 @@
 import logging
 import os
-import json
+from datetime import datetime
 from random import randint
 
 from fastapi import Depends, APIRouter, Request
-from src.config import JST, BATCH_SIZE
-from src.manager_api.db import get_async_session
+from sqlalchemy import select
+
+from src.config import JST
+from src.config import WORKER_CTLOG_REQUEST_INTERVAL_SEC, WORKER_PING_INTERVAL_SEC
 from src.manager_api import locks
+from src.manager_api.base_models import WorkerPingModel, WorkerPingBaseModel, SimpleResponse, \
+    FailedResponse, PingResponse
+from src.manager_api.db import get_async_session
 from src.manager_api.db_query import too_slow_duration_by_log_name
 from src.manager_api.models import WorkerLogStat, WorkerStatus
-from sqlalchemy import select
-from datetime import datetime
 from src.share.job_status import JobStatus
-from src.config import WORKER_CTLOG_REQUEST_INTERVAL_SEC, WORKER_PING_INTERVAL_SEC
-from src.manager_api.base_models import WorkerPingModel, WorkerPingBaseModel, WorkerErrorModel, SimpleResponse, \
-    FailedResponse, PingResponse
 from src.share.utils import extract_ip_address_hash
 
 router = APIRouter()

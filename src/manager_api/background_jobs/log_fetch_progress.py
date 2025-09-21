@@ -1,9 +1,11 @@
 import asyncio
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime
+
 from sqlalchemy import select, update, insert
-from src.manager_api.models import WorkerStatus, CTLogSTH, LogFetchProgress, LogFetchProgressStatus
+
 from src.config import CT_LOG_ENDPOINTS, LOG_FETCH_PROGRESS_TTL, BATCH_SIZE, JST
 from src.manager_api.db import get_async_session
+from src.manager_api.models import WorkerStatus, CTLogSTH, LogFetchProgress, LogFetchProgressStatus
 from src.share.job_status import JobStatus
 from src.share.logger import logger
 

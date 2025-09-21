@@ -1,17 +1,15 @@
-from src.config import ETA_BASE_DATE
-from src.config import JST, BATCH_SIZE
-from src.manager_api.db import get_async_session
-from src.manager_api import locks
-from src.manager_api.models import WorkerLogStat, WorkerStatus, LogFetchProgress, LogFetchProgressHistory
+import datetime as dt
 from datetime import datetime, timedelta
+
 from fastapi import Depends, APIRouter
 from sqlalchemy import func, select
-from src.share.job_status import JobStatus
-import datetime as dt
 
+from src.config import ETA_BASE_DATE
+from src.config import JST
 # background jobs
 from src.manager_api.background_jobs.unique_cert_counter import get_unique_cert_counter_count
-
+from src.manager_api.db import get_async_session
+from src.manager_api.models import WorkerStatus, LogFetchProgress, LogFetchProgressHistory
 
 router = APIRouter()
 

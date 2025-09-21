@@ -1,16 +1,17 @@
+from datetime import datetime, timedelta
+
 from asyncache import cached
 from cachetools import TTLCache
-
-from src.manager_api.db_query import get_running_thread_count, worker_status_range_total_count, aggregate_worker_status
-from src.share.animal import get_worker_emoji
-from src.config import JST, BATCH_SIZE, ORDERED_CATEGORIES
-from src.manager_api.db import get_async_session
-from src.manager_api.models import WorkerLogStat, WorkerStatus
-from datetime import datetime, timedelta
 from fastapi import Depends, APIRouter
 from sqlalchemy import func, select, text
-from src.share.job_status import JobStatus, ALL_JOB_STATUS
+
+from src.config import JST, ORDERED_CATEGORIES
+from src.manager_api.db import get_async_session
+from src.manager_api.db_query import get_running_thread_count, worker_status_range_total_count, aggregate_worker_status
+from src.manager_api.models import WorkerLogStat, WorkerStatus
 from src.manager_api.models import WorkerStatusAggs
+from src.share.animal import get_worker_emoji
+from src.share.job_status import JobStatus, ALL_JOB_STATUS
 from src.share.logger import logger
 
 # background jobs
