@@ -4,8 +4,10 @@ import argparse
 import sys, os
 from typing import List, Tuple
 
+from retry import retry
+
 from src.manager_api.base_models import Categories, WorkerPingBaseModel
-from src.worker.worker_base_models import CertCompareModel, PendingRequest, CompletedJob, WorkerArgs
+from src.worker.worker_base_models import CertCompareModel, PendingRequest, WorkerArgs
 from src.worker.worker_common_funcs import list_model_to_list_dict
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -340,16 +342,15 @@ def pending_file_name(request_info, prefix):
     uuid_short = uuid.uuid4().hex[:8]
     return f"{prefix}_{timestamp}_{log_name_clean}_{worker_name_clean}_{uuid_short}.json"
 
-
+@retry(tries=10, delay=20, jitter=(1, 10))
 def send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, max_retry_after=0, total_retries=0):
-    completed_data = CompletedJob(
+    completed_data = WorkerPingBaseModel(
         worker_name=args.worker_name,
         log_name=log_name,
         ct_log_url=ct_log_url,
         start=task.get('start'),
         end=end,
         current=current,
-        worker_total_count=worker_total_count,
         last_uploaded_index=last_uploaded_index,
         status=JobStatus.COMPLETED.value,
         jp_count=worker_jp_count,
@@ -360,14 +361,8 @@ def send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded
     url = f"{args.manager}/api/worker/completed"
     try:
         resp = requests.post(url, json=completed_data.dict(), timeout=180)
-        if resp.status_code != 200:
-            # Log detailed API response for debugging
-            logger.debug(f"[worker] failed to send completed api: status={resp.status_code}")
-            logger.debug(f"[worker] completed api response body: {resp.text}")
-            logger.debug(f"[worker] completed api request data: {completed_data.json(indent=2)}")
-            raise Exception(f"status={resp.status_code} body={resp.text}")
-        else:
-            logger.debug(f"[worker] completed api - successfully sent: {log_name} range={task.get('start')}-{end}")
+        resp.raise_for_status()
+        logger.debug(f"[worker] completed api - successfully sent: {log_name} range={task.get('start')}-{end}")
     except Exception as e:
         logger.debug(f"[worker] failed to send completed api: {e}")
         save_pending_request(PendingRequest(**{

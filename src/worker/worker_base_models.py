@@ -21,22 +21,6 @@ class PendingRequest(BaseModel):
     method: str
     data: Any
 
-class CompletedJob(BaseModel):
-    worker_name: str
-    log_name: str
-    ct_log_url: str
-    start: int
-    end: int
-    current: int
-    worker_total_count: int = 0
-    last_uploaded_index: int = 0
-    status: str
-    jp_count: int = 0
-    jp_ratio: float = 0
-    max_retry_after: int = 0
-    total_retries: int = 0
-
-
 
 class WorkerArgs(BaseModel):
     proxies: Optional[List[str]] = []
