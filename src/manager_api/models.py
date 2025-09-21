@@ -57,6 +57,75 @@ class Cert(Base):
         Index('idx_cert_serial_number', 'serial_number', mysql_length={'serial_number': 100}),
     )
 
+class Cert2(Base):
+    __tablename__ = 'cert2'
+    
+    # Primary key
+    id = Column(Integer, primary_key=True)
+    
+    # Basic certificate information (kept from original)
+    common_name = Column(String(512))
+    not_before = Column(DateTime)
+    not_after = Column(DateTime)
+    serial_number = Column(String(256))
+    subject_alternative_names = Column(Text)  # JSON string
+    certificate_fingerprint_sha256 = Column(String(128))
+    subject_public_key_hash = Column(String(128))
+    public_key_algorithm = Column(String(64))
+    key_size = Column(Integer)
+    signature_algorithm = Column(String(128))
+    ct_log_timestamp = Column(DateTime)
+    
+    # Binary indicators for URL presence (converted from original URL fields)
+    has_crl_urls = Column(Integer)  # 0 or 1
+    has_ocsp_urls = Column(Integer)  # 0 or 1
+    
+    # Certificate metadata (kept from original)
+    vetting_level = Column(String(8))  # 'dv', 'ov', 'ev'
+    san_count = Column(Integer)
+    issued_on_weekend = Column(Boolean)
+    issued_at_night = Column(Boolean)
+    organization_type = Column(String(32))
+    is_wildcard = Column(Boolean)
+    is_precertificate = Column(Boolean, default=None)
+    
+    # Complete issuer field (for unique index)
+    issuer = Column(String(256))
+    
+    # Individual issuer components
+    issuer_cn = Column(String(256))  # Common Name
+    issuer_o = Column(String(256))   # Organization
+    issuer_ou = Column(String(256))  # Organizational Unit
+    issuer_c = Column(String(64))    # Country
+    issuer_st = Column(String(128))  # State/Province
+    issuer_l = Column(String(128))   # Locality/City
+    issuer_email = Column(String(256))  # Email Address
+    issuer_dc = Column(String(256))  # Domain Component
+    
+    # Complete root issuer field (for analysis)
+    root_issuer = Column(String(512))
+    
+    # Individual root issuer components
+    root_issuer_cn = Column(String(256))  # Common Name
+    root_issuer_o = Column(String(256))   # Organization
+    root_issuer_ou = Column(String(256))  # Organizational Unit
+    root_issuer_c = Column(String(64))    # Country
+    root_issuer_st = Column(String(128))  # State/Province
+    root_issuer_l = Column(String(128))   # Locality/City
+    root_issuer_email = Column(String(256))  # Email Address
+    root_issuer_dc = Column(String(256))  # Domain Component
+    
+    # Indexes for performance optimization
+    __table_args__ = (
+        # Unique index same as UniqueCertCounter model
+        Index('idx_cert2_unique', 'issuer', 'serial_number', 'certificate_fingerprint_sha256', unique=True),
+        # Additional performance indexes
+        Index('idx_cert2_issuer', 'issuer', mysql_length={'issuer': 100}),
+        Index('idx_cert2_common_name', 'common_name', mysql_length={'common_name': 100}),
+        Index('idx_cert2_ct_log_timestamp', 'ct_log_timestamp'),
+    )
+
+
 class UploadStat(Base):
     __tablename__ = 'upload_stats'
     id = Column(Integer, primary_key=True)
