@@ -305,27 +305,37 @@
         // ETA Countdown Timer
         function updateCountdown() {
             var countdownElement = document.getElementById('eta-countdown');
-
+            
             if (!countdownElement) {
                 return;
             }
-
+            
             var etaTimestamp = countdownElement.getAttribute('data-eta-timestamp');
-
+            
             if (!etaTimestamp) {
                 countdownElement.textContent = '-';
                 return;
             }
-
+            
             var targetDate = new Date(etaTimestamp);
             var now = new Date();
             var timeDiff = targetDate - now;
-
+            
+            // Format the completion time
+            var completionTimeStr = targetDate.toLocaleString('ja-JP', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            
             if (timeDiff <= 0) {
-                countdownElement.textContent = 'Completed!';
+                countdownElement.innerHTML = 'Completed!<br>(' + completionTimeStr + ')';
                 return;
             }
-
+            
             // Calculate time components
             var totalSeconds = Math.floor(timeDiff / 1000);
             var years = Math.floor(totalSeconds / (365 * 24 * 3600));
@@ -333,24 +343,25 @@
             var hours = Math.floor((totalSeconds % (24 * 3600)) / 3600);
             var minutes = Math.floor((totalSeconds % 3600) / 60);
             var seconds = totalSeconds % 60;
-
+            
             // Format time components with leading zeros
             var hh = String(hours).padStart(2, '0');
             var mm = String(minutes).padStart(2, '0');
             var ss = String(seconds).padStart(2, '0');
-
+            
             // Build countdown string in format: HH:MM:SS Xd Yy
             var countdownStr = hh + ':' + mm + ':' + ss;
-
+            
             if (days > 0) {
                 countdownStr += ' ' + days + 'd';
             }
-
+            
             if (years > 0) {
                 countdownStr += ' ' + years + 'y';
             }
-
-            countdownElement.textContent = countdownStr;
+            
+            // Display countdown with completion time in parentheses on new line
+            countdownElement.innerHTML = countdownStr + '<br>(' + completionTimeStr + ')';
         }
 
         // Update countdown immediately and then every second
