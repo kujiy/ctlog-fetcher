@@ -119,15 +119,21 @@ class WorkerErrorModel(BaseModel):
 class NextTask(BaseModel):
     log_name: str = Field(..., min_length=1, max_length=64)
     ct_log_url: str = Field(..., min_length=5, max_length=256)
-    start: int
-    end: int
-    sth_end: int
+    start: int = 0
+    end: int = 0
+    sth_end: int = 0
     ip_address: Optional[str] = Field(None, max_length=64)
     ctlog_request_interval_sec: int = Field(..., gt=0)  # 1 sec to 1 hour
 
+class WorkerNextTask(NextTask):
+    manager: str
+    worker_name: str
+    status: JobStatus
+    current: int = 0
+
 class NextTaskCompleted(BaseModel):
     message: str
-    slee_sec: int
+    sleep_sec: int = 1
 
 class Categories(BaseModel):
     all_categories: List[str]
