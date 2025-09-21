@@ -46,7 +46,8 @@ class Cert(Base):
     # Indexes for performance optimization
     __table_args__ = (
         # For unique certificate identification in /api/logs_summary (optimized for COUNT(DISTINCT issuer, serial_number))
-        Index('idx_cert_unique_optimized', 'issuer', 'serial_number'),
+        Index('idx_cert_unique_optimized', 'issuer', 'serial_number'),  # TODO: delete after adding the _new one
+        Index('idx_cert_unique_optimized_new', 'issuer', 'serial_number', 'certificate_fingerprint_sha256'),
         # For log_name filtering
         Index('idx_cert_log_name', 'log_name'),
         # For created_at ordering/filtering

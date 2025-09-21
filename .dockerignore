@@ -1,4 +1,5 @@
 src/config_secret.py
+**/cert_issuer_progress.txt
 
 # Git related
 .git

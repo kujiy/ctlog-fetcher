@@ -11,6 +11,8 @@ pending/*
 *.log
 .env
 *.json
+# Background job progress files
+cert_issuer_progress.txt
 # Secret configuration files
 src/config_secret.py
 # Byte-compiled / optimized / DLL files
