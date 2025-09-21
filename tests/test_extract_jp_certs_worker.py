@@ -1,7 +1,8 @@
 import os
 import json
 import types
-from src.worker.worker import extract_jp_certs
+from src.worker.worker_upload import extract_jp_certs
+
 
 def test_extract_jp_certs_worker():
     resource_path = os.path.join(os.path.dirname(__file__), 'resources', 'ct.googleapis.com_logs_eu1_xenon2025h1_ct_v1_get-entries_start_959904_end_969903_jp.json')

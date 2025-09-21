@@ -5,7 +5,9 @@ import shutil
 import uuid
 import pytest
 
-from src.worker.worker import save_pending_request, process_pending_requests_files
+from src.worker.worker_error_handlings import save_pending_request
+from src.worker.worker_retry_job import process_pending_requests_files
+
 
 def setup_module(module):
     # Create a temporary directory for testing and set as current
