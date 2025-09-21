@@ -151,14 +151,16 @@
             <tr>
                 <th>Total Tree Size</th>
                 <th>Fetched Tree Size</th>
-                <th>ETA Countdown</th>
+                <th>ETA</th>
                 <th>Unique .jp Count</th>
                 <th>Progress</th>
             </tr>
             <tr>
                 <td>{{ "{:,}".format(logs_summary.total_tree_size) }}</td>
                 <td>{{ "{:,}".format(logs_summary.fetched_tree_size) }}</td>
-                <td id="eta-countdown" data-eta-timestamp="{% if logs_summary.eta_timestamp %}{{ logs_summary.eta_timestamp }}{% endif %}">{% if logs_summary.eta_timestamp %}-{% else %}-{% endif %}</td>
+                <td id="eta-countdown" data-eta-timestamp="{% if logs_summary.eta_timestamp %}{{ logs_summary.eta_timestamp }}{% endif %}">
+                    {% if logs_summary.eta_timestamp %}-{% else %}-{% endif %}
+                </td>
                 <td class="highlight-green">
                     <a href="/unique_certs" style="text-decoration: none; color: #3498db; margin-right: 1em;">{{ "{:,}".format(logs_summary.unique_jp_count) }}</a>
                 </td>
@@ -321,15 +323,14 @@
             var now = new Date();
             var timeDiff = targetDate - now;
 
-            // Format the completion time
-            var completionTimeStr = targetDate.toLocaleString('ja-JP', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
+            // Format the completion time as YYYY-MM-DD HH:MM:SS (API already returns JST)
+            var year = targetDate.getFullYear();
+            var month = String(targetDate.getMonth() + 1).padStart(2, '0');
+            var day = String(targetDate.getDate()).padStart(2, '0');
+            var hour = String(targetDate.getHours()).padStart(2, '0');
+            var minute = String(targetDate.getMinutes()).padStart(2, '0');
+            var second = String(targetDate.getSeconds()).padStart(2, '0');
+            var completionTimeStr = year + '-' + month + '-' + day + ' ' + hour + ':' + minute + ':' + second;
 
             if (timeDiff <= 0) {
                 countdownElement.innerHTML = 'Completed!<br>(' + completionTimeStr + ')';
@@ -361,7 +362,7 @@
             }
 
             // Display countdown with completion time in parentheses on new line
-            countdownElement.innerHTML = countdownStr + '<br>(' + completionTimeStr + ')';
+            countdownElement.innerHTML = completionTimeStr + '<br>(' + countdownStr + ')';
         }
 
         // Update countdown immediately and then every second
