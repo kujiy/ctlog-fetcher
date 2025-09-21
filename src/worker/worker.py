@@ -1,5 +1,6 @@
 # worker
-import sys, os
+import os
+import sys
 from typing import List, Optional, Dict
 
 from src.manager_api.base_models import Categories, NextTaskCompleted, NextTask, WorkerNextTask
@@ -26,7 +27,7 @@ import concurrent.futures
 from src.share.job_status import JobStatus
 import signal
 import traceback
-from src.config import CT_LOG_ENDPOINTS, WORKER_THREAD_MANAGER_INTERVAL_SEC
+from src.config import WORKER_THREAD_MANAGER_INTERVAL_SEC
 from collections import Counter
 
 from dotenv import load_dotenv
@@ -61,7 +62,7 @@ def worker_job_thread(
 
     omikuji_list = ["大吉", "中吉", "小吉", "吉", "末吉", "凶"]
     req_count = 0
-    last_ping_time = now = time.time()
+    last_ping_time = time.time()
     last_uploaded_index = None
     empty_entries_count = 0
     worker_jp_count = 0
@@ -248,12 +249,12 @@ def category_job_manager(category: str, args: WorkerArgs, global_tasks: Dict[str
                 resp = requests.get(url)
                 # logger.debug(f"status_code: {resp.status_code}, body: {resp.text[:200]}")
                 if resp.status_code == 200:
-                    task = resp.json()
+                    task_dict = resp.json()
                     # when the job is completed
-                    if not task or "start" not in task:
+                    if not task_dict or "start" not in task_dict:
                         # support the case where the API returns {"message": "all logs completed", "sleep_sec": ...}
-                        if isinstance(task, dict):
-                            task = NextTaskCompleted(**task)
+                        if isinstance(task_dict, dict):
+                            task = NextTaskCompleted(**task_dict)
                             if task.message == "all logs completed":
                                 sleep_sec = int(task.sleep_sec)
                                 logger.info(f"{category}: collected all log_names, sleeping for {sleep_sec} seconds")
@@ -268,7 +269,7 @@ def category_job_manager(category: str, args: WorkerArgs, global_tasks: Dict[str
 
                     # normal next task
                     task = WorkerNextTask(
-                        **task,
+                        **task_dict,
                         manager=args.manager,
                         worker_name=args.worker_name,
                         status=JobStatus.RUNNING.value,
@@ -285,7 +286,7 @@ def category_job_manager(category: str, args: WorkerArgs, global_tasks: Dict[str
                     sleep_with_stop_check(10, my_stop_event)
 
                     # Try several times, and if it still fails, generate the task autonomously
-                    result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, [task], args)
+                    result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, [task], args)
                     if result:
                         # task autonomous generation
                         task = WorkerNextTask(**last_job.dict())  # copy
@@ -296,7 +297,7 @@ def category_job_manager(category: str, args: WorkerArgs, global_tasks: Dict[str
                 logger.debug(f"[{category}] Communication error getting next_task. The manager api might have been down. : {e}")
                 fail_count += 1
                 sleep_with_stop_check(1, my_stop_event)
-                result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, [task], args)
+                result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, [task], args)
                 if result:
                     task = WorkerNextTask(**last_job.dict())  # copy
                 else:
@@ -317,7 +318,7 @@ def category_job_manager(category: str, args: WorkerArgs, global_tasks: Dict[str
 
                 fail_count += 1
                 sleep_with_stop_check(1, my_stop_event)
-                result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, logger, [task], args)
+                result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, [task], args)
                 if result:
                     task = WorkerNextTask(**last_job.dict())  # copy
                 else:
@@ -442,11 +443,11 @@ def category_thread_manager(args: WorkerArgs, executor, category_thread_info: Ca
 
 def fetch_categories(domain: str, worker_name: str) -> (Counter, List[str]):
     global ordered_categories
-    url = f"{domain}/api/worker/categories&worker_name={worker_name}"
+    url = f"{domain}/api/worker/categories?worker_name={worker_name}"
     try:
         resp = requests.get(url, timeout=10)
         if resp.status_code == 200:
-            cats = Categories(resp.json())
+            cats = Categories(**resp.json())
             # current API: {"all_categories": [...], "ordered_categories": [...]}
             all_categories = cats.all_categories
             ordered_categories = cats.ordered_categories
@@ -463,7 +464,6 @@ def fetch_categories(domain: str, worker_name: str) -> (Counter, List[str]):
 
 def main(args: WorkerArgs):
     global status_lines, global_tasks
-    categories = list(CT_LOG_ENDPOINTS.keys())
     status_lines = {}
     executor = None
     futures = {}
@@ -472,7 +472,7 @@ def main(args: WorkerArgs):
     # Dictionary for managing category threads: (category, idx): {"thread": future, "stop_event": event}
     category_thread_info = CategoryThreadInfo(data={})  # (category, idx): {"thread": future, "stop_event": event}
 
-    def handle_terminate(signum, frame):
+    def handle_terminate(_signum, _frame):
         if getattr(handle_terminate, '_called', False):
             logger.debug("handle_terminate: already called, skipping duplicate execution.")
             return

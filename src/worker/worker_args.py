@@ -5,6 +5,7 @@ import socket
 import urllib.parse
 
 from src.config import DASHBOARD_URL, MANAGER_API_URL
+from src.worker import logger
 from src.worker.worker_base_models import WorkerArgs
 
 # By default, the hostname is converted to two Japanese-style words plus a number. If a nickname is specified, it is used as is.
@@ -87,7 +88,7 @@ def get_args() -> WorkerArgs:
     args.worker_name = urllib.parse.quote(args.worker_name.strip())
 
     # If --proxies is not specified, split PROXIES env var by comma into a list
-    if args.proxies is not None:
+    if args.proxies is not None and isinstance(args.proxies, str):
         args.proxies = [p.strip() for p in args.proxies.split(',') if p.strip()]
     elif proxies_env:
         args.proxies = [p.strip() for p in proxies_env.split(',') if p.strip()]

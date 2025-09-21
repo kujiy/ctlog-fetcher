@@ -31,12 +31,12 @@ python src/worker/worker.py [--proxies http://proxy1,http://proxy2] [--worker-na
 
 All options can also be specified via environment variables (CLI arguments take precedence).
 
-| Environment Variable | Description                              | Example                            |
-|:-------------------- |:-----------------------------------------|:-----------------------------------|
-| PROXIES              | Proxy URLs (comma-separated, multiple)    | `http://proxy1,http://proxy2`      |
-| WORKER_NAME          | Worker name                               | `my-worker`                        |
-| MANAGER_URL          | Manager API base URL                      | `http://localhost:8000`            |
-| DEBUG                | Enable debug logging (1/true/yes)         | `1`                                |
+| Environment Variable | Description                            | Example                       |
+|:---------------------|:---------------------------------------|:------------------------------|
+| PROXIES              | Proxy URLs (comma-separated, multiple) | `http://proxy1,http://proxy2` |
+| WORKER_NAME          | Worker name                            | `my-worker`                   |
+| MANAGER_URL          | Manager API base URL                   | `http://localhost:8000`       |
+| DEBUG                | Enable debug logging (1/true/yes)      | `1`                           |
 
 Example:
 ```bash

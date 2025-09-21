@@ -45,14 +45,14 @@ def send_failed(args, log_name, ct_log_url, task: WorkerNextTask, end, current, 
         resp = requests.post(url, json=data.dict(), timeout=80)
         resp.raise_for_status()
         logger.debug(f"[worker] failed api - successfully sent: {log_name} range={task.start}-{end}")
-        return FailedResponse(resp.json()).failed_sleep_sec
+        return FailedResponse(**resp.json()).failed_sleep_sec
     except Exception as e:
         logger.debug(f"[worker] failed to send failed api: {e}")
     return 120
 
 
 def handle_api_failure(
-    category: str, fail_count, last_job: Optional[NextTask | WorkerNextTask], MAX_FAIL, logger,
+    category: str, fail_count, last_job: Optional[NextTask | WorkerNextTask], MAX_FAIL,
         task_ref: List[WorkerNextTask], args=None
 ) -> (bool, int, NextTask):
     status = None
@@ -69,7 +69,7 @@ def handle_api_failure(
         batch_size = last_job.end - last_job.start + 1
         if status != JobStatus.COMPLETED:
             # If the job is incomplete, resume
-            logger.warning(f"{category}: API failure/exception occurred {fail_count} times, resuming unfinished job (range: {last_job['start']}-{last_job['end']})")
+            logger.warning(f"{category}: API failure/exception occurred {fail_count} times, resuming unfinished job (range: {last_job})")
             resume_task = WorkerNextTask(**last_job.dict())  # copy
             resume_task.current = resume_task.start
             resume_task.status = JobStatus.RUNNING

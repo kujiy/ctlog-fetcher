@@ -1,11 +1,8 @@
-import hashlib
-import urllib
-from typing import Any, List, Optional
-from pydantic import BaseModel, Field
-from typing import Dict, Tuple, Any
-from concurrent.futures import Future
 import threading
-from pydantic import BaseModel, validator, Field, HttpUrl
+from typing import Dict, Tuple, Any
+from typing import List, Optional
+
+from pydantic import BaseModel, Field
 
 
 class CertCompareModel(BaseModel):
@@ -28,7 +25,7 @@ class PendingRequest(BaseModel):
 class WorkerArgs(BaseModel):
     proxies: Optional[List[str]] = []
     worker_name: str
-    manager: HttpUrl
+    manager: str
     debug: bool
     max_threads: int
 
