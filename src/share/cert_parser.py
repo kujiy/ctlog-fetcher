@@ -277,17 +277,10 @@ class JPCertificateParser:
 
     def get_preferred_issuer_string(self, issuer) -> str:
         """
-        Return issuer string by priority:
-        1. O (OrganizationName)
-        2. CN (CommonName)
-        3. rfc4514_string()
+        Return issuer DN (Distinguished Name) for certificate uniqueness.
+        RFC 5280 specifies that certificates should be uniquely identified 
+        by issuer DN + serialNumber pair.
         """
-        org = self._get_name_attribute(issuer, NameOID.ORGANIZATION_NAME)
-        if org:
-            return org
-        cn = self._get_name_attribute(issuer, NameOID.COMMON_NAME)
-        if cn:
-            return cn
         return issuer.rfc4514_string()
 
     def _extract_basic_info(self, certificate, ct_entry: Dict[str, Any]) -> Dict[str, Any]:
