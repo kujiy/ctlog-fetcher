@@ -365,11 +365,11 @@ def send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded
         logger.debug(f"[worker] completed api - successfully sent: {log_name} range={task.get('start')}-{end}")
     except Exception as e:
         logger.debug(f"[worker] failed to send completed api: {e}")
-        save_pending_request(PendingRequest(**{
-            "url": url,
-            "method": "POST",
-            "data": completed_data.dict()
-        }, prefix="pending_completed"))
+        save_pending_request(PendingRequest(
+            url=url,
+            method="POST",
+            data=completed_data.dict()
+        ), prefix="pending_completed")
 
 
 def send_failed(args, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, max_retry_after=0, total_retries=0):
@@ -1034,19 +1034,19 @@ def upload_jp_certs(args, category, current, jp_certs: List[CertCompareModel], f
             else:
                 logger.warning(f"[{category}] Upload failed: {resp.status_code} {url} {resp.text}")
                 with failed_lock:
-                    save_pending_request(PendingRequest(**{
-                        "url": url,
-                        "method": "POST",
-                        "data": list_model_to_list_dict(jp_certs)
-                    }, prefix="pending_upload"))
+                    save_pending_request(PendingRequest(
+                        url=url,
+                        method="POST",
+                        data=list_model_to_list_dict(jp_certs)
+                    ), prefix="pending_upload")
         except Exception as e:
             logger.debug(f"[{category}] Upload exception: {e}")
             with failed_lock:
-                save_pending_request(PendingRequest(**{
-                    "url": url,
-                    "method": "POST",
-                    "data": list_model_to_list_dict(jp_certs)
-                }, prefix="pending_upload"))
+                save_pending_request(PendingRequest(
+                    url=url,
+                    method="POST",
+                    data=list_model_to_list_dict(jp_certs)
+                ), prefix="pending_upload")
     return last_uploaded_index
 
 # --- send_ping: moved above worker_job_thread ---
