@@ -747,16 +747,16 @@ def category_thread_manager(args, executor, category_thread_info):
         sleep_with_stop_check(WORKER_THREAD_MANAGER_INTERVAL_SEC)
 
 ordered_categories = []
-def fetch_categories(domain: str, worker_name: str):
+def fetch_categories(domain: str, worker_name: str) -> (Counter, List[str]):
     global ordered_categories
     url = f"{domain}/api/worker/categories&worker_name={worker_name}"
     try:
         resp = requests.get(url, timeout=10)
         if resp.status_code == 200:
-            data = resp.json()
+            cats = Categories(resp.json())
             # current API: {"all_categories": [...], "ordered_categories": [...]}
-            all_categories = data["all_categories"]
-            ordered_categories = data["ordered_categories"]
+            all_categories = cats.all_categories
+            ordered_categories = cats.ordered_categories
             desired_counts = Counter(ordered_categories)
             return desired_counts, all_categories
         # error
@@ -1026,7 +1026,7 @@ def filter_jp_certs_unique(jp_certs: List[CertCompareModel]) -> List[CertCompare
 
 # --- upload_jp_certs: moved above worker_job_thread ---
 # Upload JP certificates to the manager API
-def upload_jp_certs(args, category, current, jp_certs: List[CertCompareModel], failed_lock):
+def upload_jp_certs(args, category, current, jp_certs: List[CertCompareModel], failed_lock) -> int:
     last_uploaded_index = None
     if jp_certs:
         url = f"{args.manager}/api/worker/upload"
