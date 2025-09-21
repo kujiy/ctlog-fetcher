@@ -41,15 +41,20 @@ async def get_logs_summary(db=Depends(get_async_session)):
     fetched_tree_size = row.fetched_tree_size if row and row.fetched_tree_size is not None else 0
     fetched_rate = row.fetched_rate if row and row.fetched_rate is not None else 0
 
-    # --- ETA (days) ---
-    today = ETA_BASE_DATE
-    now = dt.datetime.now(JST).date()
-    days_elapsed = (now - today).days if (now - today).days > 0 else 1
-    eta_days = None
+    # --- ETA (timestamp) ---
+    eta_base_datetime = dt.datetime.combine(ETA_BASE_DATE, dt.time.min).replace(tzinfo=JST)
+    now_datetime = dt.datetime.now(JST)
+    time_elapsed = now_datetime - eta_base_datetime
+    eta_timestamp = None
     if fetched_rate > 0 and fetched_rate < 1:
-        eta_days = int(days_elapsed * (1 - fetched_rate) / fetched_rate)
+        # Calculate remaining time based on elapsed time and progress rate
+        time_elapsed_seconds = time_elapsed.total_seconds()
+        total_estimated_seconds = time_elapsed_seconds / float(fetched_rate)
+        remaining_seconds = total_estimated_seconds - time_elapsed_seconds
+        remaining_time = timedelta(seconds=remaining_seconds)
+        eta_timestamp = (now_datetime + remaining_time).isoformat()
     elif fetched_rate >= 1:
-        eta_days = 0
+        eta_timestamp = now_datetime.isoformat()
 
     # --- Unique .jp count ---
     unique_jp_count = await get_unique_cert_counter_count()
@@ -58,7 +63,7 @@ async def get_logs_summary(db=Depends(get_async_session)):
         "total_tree_size": total_tree_size,
         "fetched_tree_size": fetched_tree_size,
         "fetched_rate": fetched_rate,
-        "eta_days": eta_days,
+        "eta_timestamp": eta_timestamp,
         "unique_jp_count": unique_jp_count,
         "ip_address_count": ip_address_count,
     }
@@ -136,4 +141,3 @@ async def get_log_fetch_progress_history(log_name: str, db=Depends(get_async_ses
 
     response = [to_dict(entry) for entry in history]
     return {"log_name": log_name, "history": response}
-
