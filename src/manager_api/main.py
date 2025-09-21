@@ -30,6 +30,7 @@ from .background_jobs.log_fetch_progress import start_log_fetch_progress
 from .background_jobs.unique_cert_counter import start_unique_cert_counter
 from .background_jobs.log_fetch_snapshot_job import start_log_fetch_snapshot_job
 from .background_jobs.worker_status_aggs import start_worker_status_aggs
+from .background_jobs.pending_failure_uploader import start_pending_failure_uploader
 
 
 
@@ -111,6 +112,7 @@ async def on_startup():
             app.state.background_tasks.append(start_log_fetch_progress())  # 4️⃣
             app.state.background_tasks.append(start_log_fetch_snapshot_job())  # 5️⃣
             app.state.background_tasks.append(start_worker_status_aggs())  # 6️⃣
+            app.state.background_tasks.append(start_pending_failure_uploader())  # 7️⃣
             logger.info("✅ Background jobs started and tasks stored in app.state.background_tasks")
             app.state.background_jobs_lock_file = lock_file
         except (IOError, OSError) as e:
@@ -144,4 +146,3 @@ def clear_cache():
     """Clear memory cache (for debugging)"""
     asyncio.run(cert_cache.clear())
     return {"message": "Cache cleared successfully"}
-
