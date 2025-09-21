@@ -1001,6 +1001,8 @@ def extract_jp_certs(entries, log_name, ct_log_url, args, current):
                 "worker_name": args.worker_name,
                 "ct_index": current + i,
                 "issuer": cert_data.get('issuer'),
+                "serial_number": cert_data.get('serial_number'),
+                "certificate_fingerprint_sha256": cert_data.get('certificate_fingerprint_sha256'),
                 "common_name": cert_data.get('subject_common_name')
             })
     return jp_certs
