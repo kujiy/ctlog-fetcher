@@ -114,3 +114,14 @@ class WorkerErrorModel(BaseModel):
         if re.search(r"[ \t\n\r\'\";\\\\/]", v):
             raise ValueError("worker_name contains forbidden characters (whitespace, quotes, semicolon, slash, backslash, etc.)")
         return v
+
+
+class NextTask(BaseModel):
+    log_name: str = Field(..., min_length=1, max_length=64)
+    ct_log_url: str = Field(..., min_length=5, max_length=256)
+    start: int
+    end: int
+    sth_end: int
+    ip_address: Optional[str] = Field(None, max_length=64)
+    ctlog_request_interval_sec: int = Field(..., gt=0)  # 1 sec to 1 hour
+

@@ -2,6 +2,10 @@
 import glob
 import argparse
 import sys, os
+from typing import List
+
+from src.worker.worker_base_models import CertCompareModel, PendingRequest, CompletedJob
+from src.worker.worker_common_funcs import list_model_to_list_dict
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 import hashlib
@@ -145,7 +149,7 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
     my_stop_event = get_stop_event()
 
     try:
-        jp_certs_buffer = []
+        jp_certs_buffer: List[CertCompareModel] = []
         ping_interval_sec = 60
         while current <= end and not my_stop_event.is_set():
             # if this job takes over 60 mins, break
@@ -290,20 +294,16 @@ def worker_job_thread(category, task, args, global_tasks, ctlog_request_interval
     return task.copy()
 
 
-def upload(args, category, ct_log_url, current, entries, failed_lock, jp_certs_buffer, last_uploaded_index, log_name,
+def upload(args, category, ct_log_url, current, entries, failed_lock, jp_certs_buffer: List[CertCompareModel], last_uploaded_index, log_name,
             worker_jp_count):
     # Parsing
-    jp_certs = extract_jp_certs(entries, log_name, ct_log_url, args, current)
+    jp_certs: CertCompareModel = extract_jp_certs(entries, log_name, ct_log_url, args, current)
     if jp_certs:
-        worker_jp_count += len(
-            jp_certs)  # Add the number of found jp_certs before deduplication as a reward for the worker
+        # Add the number of found jp_certs before deduplication as a reward for the worker
+        worker_jp_count += len(jp_certs)
         jp_certs_buffer.extend(jp_certs)
-        before = len(jp_certs_buffer)
         # Remove duplicates
         jp_certs_buffer = filter_jp_certs_unique(jp_certs_buffer)
-        after = len(jp_certs_buffer)
-        # logger.debug(
-        #     f"[DEBUG] JP certs buffer: before={before} after={after} added={len(jp_certs)} total_jp_count={worker_jp_count}")
     # upload if buffer is large enough
     if len(jp_certs_buffer) >= 32:
         last_uploaded_index = upload_jp_certs(args, category, current, jp_certs_buffer, failed_lock)
@@ -312,16 +312,16 @@ def upload(args, category, ct_log_url, current, entries, failed_lock, jp_certs_b
 
 
 # --- common retrying process ---
-def save_pending_request(request_info, prefix):
+def save_pending_request(request_info: PendingRequest, prefix):
     """
     request_info: dict with keys: url, method, data
     prefix: e.g. 'pending_upload', 'pending_completed'
     """
-    filename = pending_file_name(request_info, prefix)
+    filename = pending_file_name(request_info.dict(), prefix)
     fname = os.path.join(PENDING_FILE_DIR, filename)
 
     with open(fname, "w") as f:
-        json.dump(request_info, f, indent=2)
+        request_info.json(indent=2)
 
 
 def pending_file_name(request_info, prefix):
@@ -340,39 +340,39 @@ def pending_file_name(request_info, prefix):
 
 
 def send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, max_retry_after=0, total_retries=0):
-    completed_data = {
-        "worker_name": args.worker_name,
-        "log_name": log_name,
-        "ct_log_url": ct_log_url,
-        "start": task.get('start'),
-        "end": end,
-        "current": current,
-        "worker_total_count": worker_total_count,
-        "last_uploaded_index": last_uploaded_index,
-        "status": JobStatus.COMPLETED.value,
-        "jp_count": worker_jp_count,
-        "jp_ratio": (worker_jp_count / worker_total_count) if worker_total_count > 0 else 0,
-        "max_retry_after": max_retry_after,
-        "total_retries": total_retries
-    }
+    completed_data = CompletedJob(
+        worker_name=args.worker_name,
+        log_name=log_name,
+        ct_log_url=ct_log_url,
+        start=task.get('start'),
+        end=end,
+        current=current,
+        worker_total_count=worker_total_count,
+        last_uploaded_index=last_uploaded_index,
+        status=JobStatus.COMPLETED.value,
+        jp_count=worker_jp_count,
+        jp_ratio=(worker_jp_count / worker_total_count) if worker_total_count > 0 else 0,
+        max_retry_after=max_retry_after,
+        total_retries=total_retries
+    )
     url = f"{args.manager}/api/worker/completed"
     try:
-        resp = requests.post(url, json=completed_data, timeout=180)
+        resp = requests.post(url, json=completed_data.dict(), timeout=180)
         if resp.status_code != 200:
             # Log detailed API response for debugging
             logger.debug(f"[worker] failed to send completed api: status={resp.status_code}")
             logger.debug(f"[worker] completed api response body: {resp.text}")
-            logger.debug(f"[worker] completed api request data: {json.dumps(completed_data, indent=2)}")
+            logger.debug(f"[worker] completed api request data: {completed_data.json(indent=2)}")
             raise Exception(f"status={resp.status_code} body={resp.text}")
         else:
             logger.debug(f"[worker] completed api - successfully sent: {log_name} range={task.get('start')}-{end}")
     except Exception as e:
         logger.debug(f"[worker] failed to send completed api: {e}")
-        save_pending_request({
+        save_pending_request(PendingRequest(**{
             "url": url,
             "method": "POST",
-            "data": completed_data
-        }, prefix="pending_completed")
+            "data": completed_data.dict()
+        }, prefix="pending_completed"))
 
 
 def send_failed(args, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count, max_retry_after=0, total_retries=0):
@@ -952,7 +952,7 @@ def report_worker_error(args, **kwargs):
         logger.warning(f"[worker_error] failed to report error: {post_e}")
 
 
-def extract_jp_certs(entries, log_name, ct_log_url, args, current):
+def extract_jp_certs(entries, log_name, ct_log_url, args, current) -> List[CertCompareModel]:
     jp_certs = []
     parser = JPCertificateParser()
     for i, entry in enumerate(entries):
@@ -994,7 +994,7 @@ def extract_jp_certs(entries, log_name, ct_log_url, args, current):
             )
             continue
         if cert_data:
-            jp_certs.append({
+            jp_certs.append(CertCompareModel(**{
                 "ct_entry": json.dumps(entry, separators=(',', ':')),
                 "ct_log_url": ct_log_url,
                 "log_name": log_name,
@@ -1004,20 +1004,20 @@ def extract_jp_certs(entries, log_name, ct_log_url, args, current):
                 "serial_number": cert_data.get('serial_number'),
                 "certificate_fingerprint_sha256": cert_data.get('certificate_fingerprint_sha256'),
                 "common_name": cert_data.get('subject_common_name')
-            })
+            }))
     return jp_certs
 
 
 # --- JP certs filter for uniqueness ---
 # Remove duplicate JP certificates
-def filter_jp_certs_unique(jp_certs):
+def filter_jp_certs_unique(jp_certs: List[CertCompareModel]) -> List[CertCompareModel]:
     seen = set()
     filtered = []
     for cert in jp_certs:
         key = (
-            cert.get("issuer"),
-            cert.get("serial_number"),
-            cert.get("certificate_fingerprint_sha256"),
+            cert.issuer,
+            cert.serial_number,
+            cert.certificate_fingerprint_sha256,
         )
         if key not in seen:
             seen.add(key)
@@ -1026,30 +1026,30 @@ def filter_jp_certs_unique(jp_certs):
 
 # --- upload_jp_certs: moved above worker_job_thread ---
 # Upload JP certificates to the manager API
-def upload_jp_certs(args, category, current, jp_certs, failed_lock):
+def upload_jp_certs(args, category, current, jp_certs: List[CertCompareModel], failed_lock):
     last_uploaded_index = None
     if jp_certs:
         url = f"{args.manager}/api/worker/upload"
         try:
-            resp = requests.post(url, json=jp_certs, timeout=180)
+            resp = requests.post(url, json=list_model_to_list_dict(jp_certs), timeout=180)
             if resp.status_code == 200:
                 last_uploaded_index = current
             else:
                 logger.warning(f"[{category}] Upload failed: {resp.status_code} {url} {resp.text}")
                 with failed_lock:
-                    save_pending_request({
+                    save_pending_request(PendingRequest(**{
                         "url": url,
                         "method": "POST",
-                        "data": jp_certs
-                    }, prefix="pending_upload")
+                        "data": list_model_to_list_dict(jp_certs)
+                    }, prefix="pending_upload"))
         except Exception as e:
             logger.debug(f"[{category}] Upload exception: {e}")
             with failed_lock:
-                save_pending_request({
+                save_pending_request(PendingRequest(**{
                     "url": url,
                     "method": "POST",
-                    "data": jp_certs
-                }, prefix="pending_upload")
+                    "data": list_model_to_list_dict(jp_certs)
+                }, prefix="pending_upload"))
     return last_uploaded_index
 
 # --- send_ping: moved above worker_job_thread ---
