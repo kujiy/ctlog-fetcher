@@ -14,7 +14,7 @@ class CertCompareModel(BaseModel):
     issuer: str
     serial_number: str
     certificate_fingerprint_sha256: str
-    common_name: str
+    common_name: str = None
 
 class PendingRequest(BaseModel):
     url: str
