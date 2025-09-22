@@ -36,7 +36,7 @@ def fetch_ct_log(ct_log_url, start, end, proxies=None, retry_stats=None, stop_ev
             logger.debug(f"[CtLogFetch] CT log rate limited (429): waiting {wait_sec}s. url={url}")
             sleep_with_stop_check(wait_sec, stop_event)
             return []
-        elif resp.status_code == 400 and "need tree size":
+        elif resp.status_code == 400 and "need tree size" in resp.text.lower():
             logger.debug(f"[CtLogFetch] NeedTreeSizeException: {resp.text} url={url}")
             raise NeedTreeSizeException(resp.text)
         else:
