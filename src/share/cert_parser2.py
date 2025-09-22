@@ -16,6 +16,7 @@ import warnings
 # JST timezone
 JST = timezone(timedelta(hours=9))
 
+from pydantic import BaseModel, Field
 from cryptography.utils import CryptographyDeprecationWarning
 from cryptography.x509 import ExtensionNotFound
 
@@ -44,6 +45,74 @@ class VettingLevel(str, Enum):
     DV = "dv"
     OV = "ov"
     EV = "ev"
+
+
+class Cert2Data(BaseModel):
+    """Pydantic model for certificate data returned by JPCertificateParser2."""
+    
+    # Basic certificate information
+    certificate_fingerprint_sha256: str = Field(..., description="SHA256 fingerprint of the certificate")
+    serial_number: str = Field(..., description="Certificate serial number")
+    common_name: Optional[str] = Field(None, description="Common name from certificate subject")
+    
+    # Validity period
+    not_before: datetime = Field(..., description="Certificate not valid before date")
+    not_after: datetime = Field(..., description="Certificate not valid after date")
+    
+    # Public key information
+    public_key_algorithm: Optional[str] = Field(None, description="Public key algorithm")
+    key_size: Optional[int] = Field(None, description="Public key size in bits")
+    signature_algorithm: Optional[str] = Field(None, description="Signature algorithm")
+    
+    # URL indicators
+    has_crl_urls: int = Field(0, description="Binary indicator for CRL URLs presence (0 or 1)")
+    has_ocsp_urls: int = Field(0, description="Binary indicator for OCSP URLs presence (0 or 1)")
+    
+    # Timing information
+    issued_on_weekend: bool = Field(False, description="Whether certificate was issued on weekend/holiday")
+    issued_at_night: bool = Field(False, description="Whether certificate was issued at night (20:00-08:00 JST)")
+    
+    # Japan-specific information
+    organization_type: str = Field("unknown", description="Organization type based on JP domain")
+    is_wildcard: bool = Field(False, description="Whether certificate is a wildcard certificate")
+    root_ca_issuer_name: Optional[str] = Field(None, description="Root CA issuer name")
+    
+    # Technical information
+    subject_public_key_hash: Optional[str] = Field(None, description="SHA256 hash of subject public key")
+    issuance_lag_seconds: Optional[int] = Field(None, description="Issuance lag in seconds")
+    days_before_expiry: Optional[int] = Field(None, description="Days before certificate expiry")
+    issued_after_expiry: bool = Field(False, description="Whether certificate was issued after expiry")
+    is_automated_renewal: Optional[bool] = Field(None, description="Whether certificate is automated renewal")
+    
+    # Issuer information
+    issuer: Optional[str] = Field(None, description="Complete issuer string")
+    issuer_cn: Optional[str] = Field(None, description="Issuer common name")
+    issuer_o: Optional[str] = Field(None, description="Issuer organization")
+    issuer_ou: Optional[str] = Field(None, description="Issuer organizational unit")
+    issuer_c: Optional[str] = Field(None, description="Issuer country")
+    issuer_st: Optional[str] = Field(None, description="Issuer state/province")
+    issuer_l: Optional[str] = Field(None, description="Issuer locality")
+    issuer_email: Optional[str] = Field(None, description="Issuer email")
+    issuer_dc: Optional[str] = Field(None, description="Issuer domain component")
+    
+    # Root issuer information
+    root_issuer: Optional[str] = Field(None, description="Complete root issuer string")
+    root_issuer_cn: Optional[str] = Field(None, description="Root issuer common name")
+    root_issuer_o: Optional[str] = Field(None, description="Root issuer organization")
+    root_issuer_ou: Optional[str] = Field(None, description="Root issuer organizational unit")
+    root_issuer_c: Optional[str] = Field(None, description="Root issuer country")
+    root_issuer_st: Optional[str] = Field(None, description="Root issuer state/province")
+    root_issuer_l: Optional[str] = Field(None, description="Root issuer locality")
+    root_issuer_email: Optional[str] = Field(None, description="Root issuer email")
+    root_issuer_dc: Optional[str] = Field(None, description="Root issuer domain component")
+    
+    # CT log specific information
+    ct_log_timestamp: datetime = Field(..., description="CT log timestamp")
+    subject_alternative_names: str = Field(..., description="JSON string of subject alternative names")
+    san_count: int = Field(0, description="Number of subject alternative names")
+    is_precertificate: bool = Field(False, description="Whether this is a precertificate")
+    vetting_level: str = Field(..., description="Certificate vetting level (dv, ov, ev)")
+
 
 class JPCertificateParser2:
     """Enhanced parser for Japanese domain certificates - Cert2 model specific."""
@@ -116,7 +185,7 @@ class JPCertificateParser2:
             'okinawa.jp': 'prefecture.jp'
         }
 
-    def parse_ct_entry_to_cert2_data(self, ct_entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def parse_ct_entry_to_cert2_data(self, ct_entry: Dict[str, Any]) -> Optional[Cert2Data]:
         """
         Parse CT log entry and extract all required certificate data for Cert2 model.
         Returns None only if parsing fails (not for non-jp domains).
@@ -144,9 +213,9 @@ class JPCertificateParser2:
         cert_data['is_precertificate'] = (entry_type == 1)
         cert_data['vetting_level'] = self._extract_vetting_level(certificate).value
         
-        return cert_data
+        return Cert2Data(**cert_data)
 
-    def parse_only_jp_cert_to_cert2(self, ct_entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def parse_only_jp_cert_to_cert2(self, ct_entry: Dict[str, Any]) -> Optional[Cert2Data]:
         """
         Parse CT log entry and return cert2 data only if it is a .jp domain cert, else None.
         """
@@ -154,9 +223,10 @@ class JPCertificateParser2:
         if not cert_data:
             return None
         # Check if any SAN or CN is .jp
-        domains = json.loads(cert_data.get('subject_alternative_names', '[]'))
+        domains = json.loads(cert_data.subject_alternative_names)
         if any(d.lower().endswith('.jp') for d in domains):
             return cert_data
+        return None
 
     def _parse_certificate_from_ct_entry(self, entry: Dict[str, Any]) -> Tuple[Any, Any, Any]:
         """Parse certificate from CT log entry."""

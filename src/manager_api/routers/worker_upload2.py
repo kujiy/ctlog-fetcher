@@ -43,9 +43,9 @@ async def upload_certificates2(
             continue
 
         # Get values for duplicate check
-        issuer = cert_data.get('issuer')
-        serial_number = cert_data.get('serial_number')
-        certificate_fingerprint_sha256 = cert_data.get('certificate_fingerprint_sha256')
+        issuer = cert_data.issuer
+        serial_number = cert_data.serial_number
+        certificate_fingerprint_sha256 = cert_data.certificate_fingerprint_sha256
 
         # Fast duplicate check with memory cache
         dup = await cert_cache.is_duplicate(issuer, serial_number, certificate_fingerprint_sha256)
@@ -57,44 +57,44 @@ async def upload_certificates2(
         cert = Cert2(
             serial_number=serial_number,
             issuer=issuer,
-            not_before=cert_data.get('not_before'),
-            not_after=cert_data.get('not_after'),
-            common_name=cert_data.get('common_name'),
-            subject_alternative_names=cert_data.get('subject_alternative_names'),
-            san_count=cert_data.get('san_count'),
+            not_before=cert_data.not_before,
+            not_after=cert_data.not_after,
+            common_name=cert_data.common_name,
+            subject_alternative_names=cert_data.subject_alternative_names,
+            san_count=cert_data.san_count,
             certificate_fingerprint_sha256=certificate_fingerprint_sha256,
-            public_key_algorithm=cert_data.get('public_key_algorithm'),
-            key_size=cert_data.get('key_size'),
-            signature_algorithm=cert_data.get('signature_algorithm'),
-            ct_log_timestamp=cert_data.get('ct_log_timestamp'),
-            has_crl_urls=cert_data.get('has_crl_urls'),
-            has_ocsp_urls=cert_data.get('has_ocsp_urls'),
-            issued_on_weekend=cert_data.get('issued_on_weekend'),
-            issued_at_night=cert_data.get('issued_at_night'),
-            organization_type=cert_data.get('organization_type'),
-            is_wildcard=cert_data.get('is_wildcard'),
-            subject_public_key_hash=cert_data.get('subject_public_key_hash'),
-            is_precertificate=cert_data.get('is_precertificate'),
-            vetting_level=cert_data.get('vetting_level'),
+            public_key_algorithm=cert_data.public_key_algorithm,
+            key_size=cert_data.key_size,
+            signature_algorithm=cert_data.signature_algorithm,
+            ct_log_timestamp=cert_data.ct_log_timestamp,
+            has_crl_urls=cert_data.has_crl_urls,
+            has_ocsp_urls=cert_data.has_ocsp_urls,
+            issued_on_weekend=cert_data.issued_on_weekend,
+            issued_at_night=cert_data.issued_at_night,
+            organization_type=cert_data.organization_type,
+            is_wildcard=cert_data.is_wildcard,
+            subject_public_key_hash=cert_data.subject_public_key_hash,
+            is_precertificate=cert_data.is_precertificate,
+            vetting_level=cert_data.vetting_level,
             # Issuer components
-            issuer_cn=cert_data.get('issuer_cn'),
-            issuer_o=cert_data.get('issuer_o'),
-            issuer_ou=cert_data.get('issuer_ou'),
-            issuer_c=cert_data.get('issuer_c'),
-            issuer_st=cert_data.get('issuer_st'),
-            issuer_l=cert_data.get('issuer_l'),
-            issuer_email=cert_data.get('issuer_email'),
-            issuer_dc=cert_data.get('issuer_dc'),
+            issuer_cn=cert_data.issuer_cn,
+            issuer_o=cert_data.issuer_o,
+            issuer_ou=cert_data.issuer_ou,
+            issuer_c=cert_data.issuer_c,
+            issuer_st=cert_data.issuer_st,
+            issuer_l=cert_data.issuer_l,
+            issuer_email=cert_data.issuer_email,
+            issuer_dc=cert_data.issuer_dc,
             # Root issuer components
-            root_issuer=cert_data.get('root_issuer'),
-            root_issuer_cn=cert_data.get('root_issuer_cn'),
-            root_issuer_o=cert_data.get('root_issuer_o'),
-            root_issuer_ou=cert_data.get('root_issuer_ou'),
-            root_issuer_c=cert_data.get('root_issuer_c'),
-            root_issuer_st=cert_data.get('root_issuer_st'),
-            root_issuer_l=cert_data.get('root_issuer_l'),
-            root_issuer_email=cert_data.get('root_issuer_email'),
-            root_issuer_dc=cert_data.get('root_issuer_dc')
+            root_issuer=cert_data.root_issuer,
+            root_issuer_cn=cert_data.root_issuer_cn,
+            root_issuer_o=cert_data.root_issuer_o,
+            root_issuer_ou=cert_data.root_issuer_ou,
+            root_issuer_c=cert_data.root_issuer_c,
+            root_issuer_st=cert_data.root_issuer_st,
+            root_issuer_l=cert_data.root_issuer_l,
+            root_issuer_email=cert_data.root_issuer_email,
+            root_issuer_dc=cert_data.root_issuer_dc
         )
         certs_to_insert.append(cert)
 
