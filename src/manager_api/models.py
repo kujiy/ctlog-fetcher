@@ -66,16 +66,15 @@ class Cert2(Base):
     
     # Basic certificate information (kept from original)
     common_name = Column(String(512))
+    ct_log_timestamp = Column(DateTime)
     not_before = Column(DateTime)
     not_after = Column(DateTime)
     serial_number = Column(String(256))
-    subject_alternative_names = Column(Text)  # JSON string
     certificate_fingerprint_sha256 = Column(String(128))
     subject_public_key_hash = Column(String(128))
     public_key_algorithm = Column(String(64))
     key_size = Column(Integer)
     signature_algorithm = Column(String(128))
-    ct_log_timestamp = Column(DateTime)
     
     # Binary indicators for URL presence (converted from original URL fields)
     has_crl_urls = Column(Integer)  # 0 or 1
@@ -83,6 +82,7 @@ class Cert2(Base):
     
     # Certificate metadata (kept from original)
     vetting_level = Column(String(8))  # 'dv', 'ov', 'ev'
+    subject_alternative_names = Column(Text)  # JSON string
     san_count = Column(Integer)
     issued_on_weekend = Column(Boolean)
     issued_at_night = Column(Boolean)
@@ -90,7 +90,7 @@ class Cert2(Base):
     is_wildcard = Column(Boolean)
     is_precertificate = Column(Boolean, default=None)
     
-    # Complete issuer field (for unique index)
+    # Complete issuer DN field (for unique index)
     issuer = Column(String(256))
     
     # Individual issuer components
@@ -103,7 +103,7 @@ class Cert2(Base):
     issuer_email = Column(String(256))  # Email Address
     issuer_dc = Column(String(256))  # Domain Component
     
-    # Complete root issuer field (for analysis)
+    # Complete root issuer DN field (for analysis)
     root_issuer = Column(String(512))
     
     # Individual root issuer components
@@ -115,6 +115,13 @@ class Cert2(Base):
     root_issuer_l = Column(String(128))   # Locality/City
     root_issuer_email = Column(String(256))  # Email Address
     root_issuer_dc = Column(String(256))  # Domain Component
+    
+    # CT log related fields
+    log_name = Column(String(64))
+    ct_index = Column(BigInteger, default=None)  # index within the log
+    worker_name = Column(String(64))
+    created_at = Column(DateTime)
+    ct_entry = Column(Text)  # Entire CT log entry as JSON string
     
     # Indexes for performance optimization
     __table_args__ = (
