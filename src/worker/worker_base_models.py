@@ -3,14 +3,11 @@ from typing import Dict, Tuple, Any
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
+from src.manager_api.base_models import UploadCertItem
 
 
-class CertCompareModel(BaseModel):
-    ct_entry: str
-    ct_log_url: str
-    log_name: str
-    worker_name: str
-    ct_index: int
+class CertCompareModel(UploadCertItem):
+    # Additional fields for internal duplicate checking (extends UploadCertItem)
     issuer: str
     serial_number: str
     certificate_fingerprint_sha256: str

@@ -7,11 +7,12 @@ from typing import List
 
 import requests
 
-from src.share.cert_parser import JPCertificateParser
+from src.share.cert_parser2 import JPCertificateParser2
 from src.worker import logger, FAILED_FILE_DIR
 from src.worker.worker_base_models import WorkerArgs, CertCompareModel, PendingRequest
 from src.worker.worker_common_funcs import list_model_to_list_dict
 from src.worker.worker_error_handlings import report_worker_error, save_pending_request
+from src.manager_api.base_models import UploadCertItem
 
 
 
@@ -19,10 +20,10 @@ from src.worker.worker_error_handlings import report_worker_error, save_pending_
 # Remove duplicate JP certificates
 def extract_jp_certs(entries, log_name, ct_log_url, args: WorkerArgs, current) -> List[CertCompareModel]:
     jp_certs = []
-    parser = JPCertificateParser()
+    parser = JPCertificateParser2()
     for i, entry in enumerate(entries):
         try:
-            cert_data = parser.parse_only_jp_cert(entry)
+            cert_data = parser.parse_only_jp_cert_to_cert2(entry)
         except Exception as e:
             _tb = traceback.format_exc()
             ct_index = current + i
@@ -65,10 +66,11 @@ def extract_jp_certs(entries, log_name, ct_log_url, args: WorkerArgs, current) -
                 "log_name": log_name,
                 "worker_name": args.worker_name,
                 "ct_index": current + i,
-                "issuer": cert_data.get('issuer'),
-                "serial_number": cert_data.get('serial_number'),
-                "certificate_fingerprint_sha256": cert_data.get('certificate_fingerprint_sha256'),
-                "common_name": cert_data.get('subject_common_name')
+                "ip_address": None,  # Optional field from UploadCertItem
+                "issuer": cert_data.issuer,
+                "serial_number": cert_data.serial_number,
+                "certificate_fingerprint_sha256": cert_data.certificate_fingerprint_sha256,
+                "common_name": cert_data.common_name
             }))
     return jp_certs
 
@@ -93,9 +95,22 @@ def filter_jp_certs_unique(jp_certs: List[CertCompareModel]) -> List[CertCompare
 def upload_jp_certs(args, category, current, jp_certs: List[CertCompareModel], failed_lock) -> int:
     last_uploaded_index = None
     if jp_certs:
-        url = f"{args.manager}/api/worker/upload"
+        # Convert CertCompareModel to UploadCertItem (remove internal duplicate checking fields)
+        upload_items = [
+            UploadCertItem(
+                ct_entry=cert.ct_entry,
+                ct_log_url=cert.ct_log_url,
+                log_name=cert.log_name,
+                worker_name=cert.worker_name,
+                ct_index=cert.ct_index,
+                ip_address=cert.ip_address
+            )
+            for cert in jp_certs
+        ]
+        
+        url = f"{args.manager}/api/worker/upload2"
         try:
-            resp = requests.post(url, json=list_model_to_list_dict(jp_certs), timeout=180)
+            resp = requests.post(url, json=[item.dict() for item in upload_items], timeout=180)
             if resp.status_code == 200:
                 last_uploaded_index = current
             else:
@@ -104,7 +119,7 @@ def upload_jp_certs(args, category, current, jp_certs: List[CertCompareModel], f
                     save_pending_request(PendingRequest(
                         url=url,
                         method="POST",
-                        data=list_model_to_list_dict(jp_certs)
+                        data=[item.dict() for item in upload_items]
                     ), prefix="pending_upload")
         except Exception as e:
             logger.debug(f"[{category}] Upload exception: {e}")
@@ -112,7 +127,7 @@ def upload_jp_certs(args, category, current, jp_certs: List[CertCompareModel], f
                 save_pending_request(PendingRequest(
                     url=url,
                     method="POST",
-                    data=list_model_to_list_dict(jp_certs)
+                    data=[item.dict() for item in upload_items]
                 ), prefix="pending_upload")
     return last_uploaded_index
 
@@ -134,4 +149,3 @@ def upload(args: WorkerArgs, category, ct_log_url, current, entries, failed_lock
         last_uploaded_index = upload_jp_certs(args, category, current, jp_certs_buffer, failed_lock)
         jp_certs_buffer = []
     return jp_certs_buffer, last_uploaded_index, worker_jp_count
-

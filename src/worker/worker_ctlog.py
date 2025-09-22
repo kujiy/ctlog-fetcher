@@ -44,7 +44,7 @@ def fetch_ct_log(ct_log_url, start, end, proxies=None, retry_stats=None, stop_ev
             sleep_with_stop_check(5, stop_event)
             return []
     except Exception as e:
-        logger.debug(f"[CtLogFetch] fetch_ct_log exception: [{type(e).__name__}] {e} url={url}")
+        logger.debug(f"[CtLogFetch] fetch_ct_log exception: [{type(e).__name__}] {e} url={url} retry_stats={retry_stats}")
         if isinstance(e, NeedTreeSizeException):
             raise
         return []
