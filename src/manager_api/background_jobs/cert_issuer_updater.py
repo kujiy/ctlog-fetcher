@@ -61,8 +61,15 @@ class CertIssuerUpdater:
                     logger.info("8️⃣ No more certificates to process")
                     break
 
+                # Track processed certificates in this batch to avoid duplicate deletion issues
+                processed_in_batch = set()
                 processed_count = 0
+                
                 for row in rows:
+                    # Skip if this certificate was already deleted in this batch
+                    if row.id in processed_in_batch:
+                        continue
+                        
                     try:
                         # Step 1: Update issuer field by parsing ct_entry
                         updated_issuer = None
@@ -86,19 +93,16 @@ class CertIssuerUpdater:
                         current_serial = row.serial_number
                         current_fingerprint = row.certificate_fingerprint_sha256
 
-                        # print(current_issuer, current_serial, current_fingerprint)
-                        if len(current_issuer) < 10:
-                            logger.warning(f"8️⃣ Skipping cert ID {row.id} due to short issuer length. {current_issuer}")
-                            continue
-                        if current_issuer and current_serial and current_fingerprint:
+                        if current_issuer and len(current_issuer) >= 10 and current_serial and current_fingerprint:
                             # Find all certificates with the same issuer, serial_number, and fingerprint
+                            # Exclude certificates that have already been processed in this batch
                             duplicate_result = await session.execute(
                                 select(Cert.id)
                                 .where(
                                     Cert.issuer == current_issuer,
                                     Cert.serial_number == current_serial,
                                     Cert.certificate_fingerprint_sha256 == current_fingerprint,
-                                    Cert.id != row.id  # Exclude the current certificate
+                                    Cert.id > row.id  # Only look for duplicates with higher IDs to avoid deleting the current one
                                 )
                                 .order_by(Cert.id.asc())
                             )
@@ -112,8 +116,12 @@ class CertIssuerUpdater:
                                 deleted_count = delete_result.rowcount
                                 if deleted_count > 0:
                                     logger.info(f"8️⃣ Deleted {deleted_count} duplicates for cert ID {row.id}")
+                                    # Mark deleted IDs as processed to avoid processing them later in this batch
+                                    processed_in_batch.update(duplicate_ids)
                                 await session.commit()
 
+                        # Mark this certificate as processed
+                        processed_in_batch.add(row.id)
                         processed_count += 1
 
                     except Exception as e:
