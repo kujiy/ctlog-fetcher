@@ -3,4 +3,4 @@ sudo docker run -d \
 -e DEBUG=1 \
 -e MANAGER_URL=http://192.168.0.185:1173 \
 -e WORKER_NAME=chikuwa \
-docker.io/kujiy/ct-worker:20250921-231619
+docker.io/kujiy/ct-worker:20250922-122508

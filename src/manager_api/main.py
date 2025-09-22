@@ -102,7 +102,7 @@ async def on_startup():
             app.state.background_tasks = []
             app.state.background_tasks.append(start_sth_fetcher())  # 1️⃣
             app.state.background_tasks.append(start_worker_liveness_monitor())  # 2️⃣
-            app.state.background_tasks.append(start_unique_cert_counter())  # 3️⃣
+            # app.state.background_tasks.append(start_unique_cert_counter())  # 3️⃣
             app.state.background_tasks.append(start_log_fetch_progress())  # 4️⃣
             app.state.background_tasks.append(start_log_fetch_snapshot_job())  # 5️⃣
             app.state.background_tasks.append(start_worker_status_aggs())  # 6️⃣
