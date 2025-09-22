@@ -166,7 +166,7 @@ def worker_job_thread(
                 args, category, log_name, ct_log_url, task, end, current, last_uploaded_index,
                 worker_jp_count, worker_total_count, last_ping_time, status="running",
                 default_ping_seconds=ping_interval_sec, default_ctlog_request_interval_sec=ctlog_request_interval_sec,
-                max_retry_after=retry_stats['max_retry_after'], total_retries=retry_stats['total_retries']
+                max_retry_after=retry_stats.max_retry_after, total_retries=retry_stats.total_retries
             )
 
             # Use sleep_with_stop_check instead of time.sleep
@@ -208,7 +208,7 @@ def worker_job_thread(
         task.status = JobStatus.COMPLETED
         global_tasks[jobkey].status = JobStatus.COMPLETED
         send_completed(args, log_name, ct_log_url, task, end, current, last_uploaded_index, worker_jp_count, worker_total_count,
-                       retry_stats['max_retry_after'], retry_stats['total_retries'])
+                       retry_stats.max_retry_after, retry_stats.total_retries)
         expect_total_count = end - task.start + 1
         fetched_rate = worker_total_count / expect_total_count
         status_lines[status_key] = (
