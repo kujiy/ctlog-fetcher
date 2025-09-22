@@ -1,19 +1,18 @@
+import datetime as dt
 import json
 import logging
 import os
 import random
-from datetime import datetime
-from fastapi import Query, Depends, APIRouter
+from typing import List
+
+from fastapi import Depends, APIRouter
 from sqlalchemy.exc import IntegrityError
+
+from src.manager_api.base_models import UploadCertItem, UploadResponse
 from src.manager_api.certificate_cache import cert_cache
-from src.config import JST, BATCH_SIZE
 from src.manager_api.db import get_async_session
-from src.manager_api import locks
 from src.manager_api.models import Cert2
 from src.share.cert_parser2 import JPCertificateParser2
-from typing import List
-from src.manager_api.base_models import UploadCertItem, UploadResponse
-import datetime as dt
 from src.share.logger import logger
 
 router = APIRouter()

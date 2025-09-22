@@ -15,6 +15,7 @@ from src.manager_api.routers.ui_status import router as ui_status_router
 from src.manager_api.routers.worker_pings import router as worker_pings_router
 from src.manager_api.routers.worker_tasks import router as worker_tasks_router
 from src.manager_api.routers.worker_upload import router as worker_upload_router
+from src.manager_api.routers.worker_upload2 import router as worker_upload2_router
 from .background_jobs.log_fetch_progress import start_log_fetch_progress
 from .background_jobs.log_fetch_snapshot_job import start_log_fetch_snapshot_job
 from .background_jobs.pending_failure_uploader import start_pending_failure_uploader
@@ -35,6 +36,7 @@ app.include_router(ui_status_router)
 app.include_router(ui_individuals_router)
 app.include_router(ui_logs_router)
 app.include_router(worker_upload_router)
+app.include_router(worker_upload2_router)
 app.include_router(worker_pings_router)
 app.include_router(worker_tasks_router)
 

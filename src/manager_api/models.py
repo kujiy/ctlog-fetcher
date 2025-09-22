@@ -3,8 +3,7 @@
 from enum import Enum
 
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, create_engine, BigInteger, Text, Index, Float
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base
 
 Base = declarative_base()
 
@@ -60,10 +59,10 @@ class Cert(Base):
 
 class Cert2(Base):
     __tablename__ = 'cert2'
-    
+
     # Primary key
     id = Column(Integer, primary_key=True)
-    
+
     # Basic certificate information (kept from original)
     common_name = Column(String(512))
     ct_log_timestamp = Column(DateTime)
@@ -75,11 +74,11 @@ class Cert2(Base):
     public_key_algorithm = Column(String(64))
     key_size = Column(Integer)
     signature_algorithm = Column(String(128))
-    
+
     # Binary indicators for URL presence (converted from original URL fields)
     has_crl_urls = Column(Integer)  # 0 or 1
     has_ocsp_urls = Column(Integer)  # 0 or 1
-    
+
     # Certificate metadata (kept from original)
     vetting_level = Column(String(8))  # 'dv', 'ov', 'ev'
     subject_alternative_names = Column(Text)  # JSON string
@@ -89,10 +88,10 @@ class Cert2(Base):
     organization_type = Column(String(32))
     is_wildcard = Column(Boolean)
     is_precertificate = Column(Boolean, default=None)
-    
+
     # Complete issuer DN field (for unique index)
     issuer = Column(String(256))
-    
+
     # Individual issuer components
     issuer_cn = Column(String(256))  # Common Name
     issuer_o = Column(String(256))   # Organization
@@ -102,10 +101,10 @@ class Cert2(Base):
     issuer_l = Column(String(128))   # Locality/City
     issuer_email = Column(String(256))  # Email Address
     issuer_dc = Column(String(256))  # Domain Component
-    
+
     # Complete root issuer DN field (for analysis)
     root_issuer = Column(String(512))
-    
+
     # Individual root issuer components
     root_issuer_cn = Column(String(256))  # Common Name
     root_issuer_o = Column(String(256))   # Organization
@@ -115,14 +114,14 @@ class Cert2(Base):
     root_issuer_l = Column(String(128))   # Locality/City
     root_issuer_email = Column(String(256))  # Email Address
     root_issuer_dc = Column(String(256))  # Domain Component
-    
+
     # CT log related fields
     log_name = Column(String(64))
     ct_index = Column(BigInteger, default=None)  # index within the log
     worker_name = Column(String(64))
     created_at = Column(DateTime)
     ct_entry = Column(Text)  # Entire CT log entry as JSON string
-    
+
     # Indexes for performance optimization
     __table_args__ = (
         # Unique index same as UniqueCertCounter model
@@ -205,7 +204,7 @@ class WorkerStatusAggs(Base):
     failed = Column(Integer, default=0)
     resume_wait = Column(Integer, default=0)
     skipped = Column(Integer, default=0)
-    
+
     worker_name_count = Column(Integer, default=0)  # distinct worker_name count
     log_name_count = Column(Integer, default=0)  # distinct log_name count
     jp_count_sum = Column(BigInteger, default=0)
