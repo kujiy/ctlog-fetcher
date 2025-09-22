@@ -91,7 +91,10 @@ def analyze_failed_entry():
     with open(failed_entry_file, 'r') as f:
         failed_data = json.load(f)
 
-    ct_entry = failed_data['entry']
+    if 'entry' in failed_data:
+        ct_entry = failed_data['entry']
+    else:
+        ct_entry = failed_data['entries'][0]
 
     print(f"📁 File: {os.path.basename(failed_entry_file)}")
     # print(f"🏷️  Log name: {failed_data['log_name']}")

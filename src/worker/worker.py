@@ -240,6 +240,7 @@ def category_job_manager(category: str, args: WorkerArgs, global_tasks: Dict[str
     MAX_FAIL = 6
     task: NextTask | NextTaskCompleted = None
     ctlog_request_interval_sec = 1
+    force_wait = False  # Flag to force waiting when last response was "all completed"
 
     try:
         while not my_stop_event.is_set():
@@ -256,18 +257,22 @@ def category_job_manager(category: str, args: WorkerArgs, global_tasks: Dict[str
                         if isinstance(task_dict, dict):
                             task = NextTaskCompleted(**task_dict)
                             if task.message == "all logs completed":
+                                force_wait = True  # Set force_wait flag when all logs completed
                                 sleep_sec = int(task.sleep_sec)
                                 logger.info(f"{category}: collected all log_names, sleeping for {sleep_sec} seconds")
                                 sleep_with_stop_check(sleep_sec, my_stop_event)
                             else:
+                                force_wait = False  # Reset force_wait for other responses
                                 logger.info(f"{category}: unexpected API response: no next job, waiting 60 seconds")
                                 sleep_with_stop_check(60, my_stop_event)
                         else:
+                            force_wait = False  # Reset force_wait for unexpected responses
                             logger.info(f"{category}: unexpected API response: no next job, waiting 60 seconds")
                             sleep_with_stop_check(60, my_stop_event)
                         continue
 
                     # normal next task
+                    force_wait = False  # Reset force_wait when receiving a normal task
                     task = WorkerNextTask(
                         **task_dict,
                         manager=args.manager,
@@ -286,7 +291,7 @@ def category_job_manager(category: str, args: WorkerArgs, global_tasks: Dict[str
                     sleep_with_stop_check(10, my_stop_event)
 
                     # Try several times, and if it still fails, generate the task autonomously
-                    result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, [task], args)
+                    result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, [task], args, force_wait)
                     if result:
                         # task autonomous generation
                         task = WorkerNextTask(**last_job.dict())  # copy
@@ -297,7 +302,7 @@ def category_job_manager(category: str, args: WorkerArgs, global_tasks: Dict[str
                 logger.debug(f"[{category}] Communication error getting next_task. The manager api might have been down. : {e}")
                 fail_count += 1
                 sleep_with_stop_check(1, my_stop_event)
-                result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, [task], args)
+                result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, [task], args, force_wait)
                 if result:
                     task = WorkerNextTask(**last_job.dict())  # copy
                 else:
@@ -318,7 +323,7 @@ def category_job_manager(category: str, args: WorkerArgs, global_tasks: Dict[str
 
                 fail_count += 1
                 sleep_with_stop_check(1, my_stop_event)
-                result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, [task], args)
+                result, fail_count, last_job = handle_api_failure(category, fail_count, last_job, MAX_FAIL, [task], args, force_wait)
                 if result:
                     task = WorkerNextTask(**last_job.dict())  # copy
                 else:
@@ -328,10 +333,11 @@ def category_job_manager(category: str, args: WorkerArgs, global_tasks: Dict[str
                 break
 
             # # debug
-            # task = {'ct_log_url': 'https://ct.googleapis.com/logs/argon2023/', 'ctlog_request_interval_sec': 1, 'end': 708782077,
-            #  'ip_address': '12ca17b', 'log_name': 'argon2023', 'start': 708782077, 'sth_end': 1602372213}
-            # task = {'ct_log_url': 'https://ct.googleapis.com/logs/us1/argon2024/', 'ctlog_request_interval_sec': 1, 'end': 100329307,
-            # 'ip_address': '12ca17b', 'log_name': 'argon2024', 'start': 100329307, 'sth_end': 1602372213}
+            # task = WorkerNextTask(**{'ct_log_url': 'https://ct.googleapis.com/logs/us1/argon2025h1/', 'ctlog_request_interval_sec': 1,
+            # 'ip_address': '12ca17b', 'log_name': 'argon2025h1', 'start': 1420256000, 'end': 1420271999, 'sth_end': 1602372213},
+            #                       manager=args.manager,
+            #                       worker_name=args.worker_name,
+            #                       status=JobStatus.RUNNING.value)
 
             # Generate a worker_job_thread for each category
             try:

@@ -53,7 +53,7 @@ def send_failed(args, log_name, ct_log_url, task: WorkerNextTask, end, current, 
 
 def handle_api_failure(
     category: str, fail_count, last_job: Optional[NextTask | WorkerNextTask], MAX_FAIL,
-        task_ref: List[WorkerNextTask], args=None
+        task_ref: List[WorkerNextTask], args=None, force_wait=False
 ) -> (bool, int, NextTask):
     status = None
     jobkey = None
@@ -64,8 +64,13 @@ def handle_api_failure(
             status = global_tasks[jobkey].status
         else:
             status = last_job.status
-    logger.debug(f"fail_count: {fail_count}/{MAX_FAIL}, jobkey: {jobkey}, status: {status}")
+    logger.debug(f"fail_count: {fail_count}/{MAX_FAIL}, jobkey: {jobkey}, status: {status}, force_wait: {force_wait}")
     if fail_count >= MAX_FAIL and last_job:
+        # If force_wait is enabled (last response was "all completed"), don't generate autonomous tasks
+        if force_wait:
+            logger.info(f"{category}: API failure occurred but force_wait is enabled (last response was 'all completed'). Waiting for API recovery instead of autonomous task generation.")
+            return False, fail_count, last_job
+        
         batch_size = last_job.end - last_job.start + 1
         if status != JobStatus.COMPLETED:
             # If the job is incomplete, resume
