@@ -544,8 +544,8 @@ class JPCertificateParser2:
         """Extract issuer and root issuer components for Cert2 model."""
         data = {}
 
-        # Complete issuer string (for unique index)
-        data['issuer'] = self.get_preferred_issuer_string(certificate.issuer)
+        # Complete issuer DN string
+        data['issuer'] = certificate.issuer.rfc4514_string()
         
         # Individual issuer components
         data['issuer_cn'] = self._get_name_attribute(certificate.issuer, NameOID.COMMON_NAME)
@@ -559,7 +559,7 @@ class JPCertificateParser2:
 
         # For root issuer, we'll use the same issuer data for now
         # In a real implementation, you might want to extract this from the certificate chain
-        data['root_issuer'] = data['issuer']
+        data['root_issuer'] = certificate.issuer.rfc4514_string()
         data['root_issuer_cn'] = data['issuer_cn']
         data['root_issuer_o'] = data['issuer_o']
         data['root_issuer_ou'] = data['issuer_ou']
