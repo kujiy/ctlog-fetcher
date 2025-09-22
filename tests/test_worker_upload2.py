@@ -2,6 +2,7 @@ import pytest
 import httpx
 from httpx import ASGITransport
 from src.manager_api.main import app
+from src.manager_api.db import get_async_session
 import json
 import os
 import asyncio
@@ -49,7 +50,8 @@ async def test_worker_upload2_success(monkeypatch):
     async def fake_get_async_session():
         yield _DummySession()
 
-    monkeypatch.setattr("src.manager_api.db.get_async_session", fake_get_async_session)
+    # Override FastAPI dependency
+    app.dependency_overrides[get_async_session] = fake_get_async_session
 
     # Mock certificate cache to return False for duplicates
     async def fake_is_duplicate(*a, **kw):
@@ -81,18 +83,22 @@ async def test_worker_upload2_success(monkeypatch):
         }
     ]
 
-    transport = ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
-        response = await ac.post("/api/worker/upload2", json=payload)
+    try:
+        transport = ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+            response = await ac.post("/api/worker/upload2", json=payload)
 
-    print("UPLOAD2 RESPONSE:", response.status_code, response.text)
-    assert response.status_code == 200
+        print("UPLOAD2 RESPONSE:", response.status_code, response.text)
+        assert response.status_code == 200
 
-    response_data = response.json()
-    assert "inserted" in response_data
-    assert "skipped_duplicates" in response_data
-    assert isinstance(response_data["inserted"], int)
-    assert isinstance(response_data["skipped_duplicates"], int)
+        response_data = response.json()
+        assert "inserted" in response_data
+        assert "skipped_duplicates" in response_data
+        assert response_data["inserted"] == 1
+        assert response_data["skipped_duplicates"] == 0
+    finally:
+        # Clean up dependency override
+        app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio
@@ -122,7 +128,8 @@ async def test_worker_upload2_with_duplicates(monkeypatch):
     async def fake_get_async_session():
         yield _DummySession()
 
-    monkeypatch.setattr("src.manager_api.db.get_async_session", fake_get_async_session)
+    # Override FastAPI dependency
+    app.dependency_overrides[get_async_session] = fake_get_async_session
 
     # Mock certificate cache to return True for duplicates (all certificates are duplicates)
     async def fake_is_duplicate(*a, **kw):
@@ -154,3 +161,19 @@ async def test_worker_upload2_with_duplicates(monkeypatch):
         }
     ]
 
+    try:
+        transport = ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+            response = await ac.post("/api/worker/upload2", json=payload)
+
+        print("UPLOAD2 RESPONSE:", response.status_code, response.text)
+        assert response.status_code == 200
+
+        response_data = response.json()
+        assert "inserted" in response_data
+        assert "skipped_duplicates" in response_data
+        assert response_data["inserted"] == 0
+        assert response_data["skipped_duplicates"] == 1
+    finally:
+        # Clean up dependency override
+        app.dependency_overrides.clear()

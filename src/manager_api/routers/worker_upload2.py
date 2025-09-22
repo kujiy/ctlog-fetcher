@@ -17,6 +17,29 @@ from src.share.logger import logger
 
 router = APIRouter()
 
+
+def is_duplicate_constraint_error(e: IntegrityError) -> bool:
+    """
+    Check if IntegrityError is due to duplicate/unique constraint violation.
+    Returns True for duplicate constraint errors, False for other integrity errors.
+    """
+    error_msg = str(e).lower()
+    
+    # Check for MySQL duplicate entry error (error code 1062)
+    if "duplicate entry" in error_msg and "for key" in error_msg:
+        return True
+    
+    # Check for MySQL error code 1062 specifically
+    if "1062" in error_msg:
+        return True
+    
+    # Check for other database duplicate key patterns
+    if "unique constraint" in error_msg or "duplicate key" in error_msg:
+        return True
+    
+    return False
+
+
 @router.post("/api/worker/upload2")
 async def upload_certificates2(
     items: List[UploadCertItem],
@@ -126,7 +149,11 @@ async def upload_certificates2(
                     # Duplicate error (if unique index exists)
                     await db.rollback()
                     skipped_duplicates += 1
-                    await save_failed(e, items)
+                    
+                    # Only save_failed for non-duplicate constraint errors
+                    if not is_duplicate_constraint_error(e):
+                        await save_failed(e, items)
+                    
                     # Add to cache as duplicate (for skipping next time)
                     await cert_cache.add(cert.issuer, cert.serial_number, cert.certificate_fingerprint_sha256)
         except Exception as e:
