@@ -35,7 +35,11 @@ class ThreadInfo(BaseModel):
         arbitrary_types_allowed = True
 
 
+class RetryStats(BaseModel):
+    total_retries: int = Field(default=0, description="Total number of retries performed")
+    max_retry_after: int = Field(default=0, description="Maximum retry-after value encountered")
+
+
 class CategoryThreadInfo(BaseModel):
     data: Dict[Tuple[str, int], ThreadInfo] = Field(...,
                                                     description="A dictionary mapping a (category, index) tuple to a ThreadInfo object.")
-

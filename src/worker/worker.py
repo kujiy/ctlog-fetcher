@@ -6,7 +6,7 @@ from typing import List, Optional, Dict
 from src.manager_api.base_models import Categories, NextTaskCompleted, NextTask, WorkerNextTask
 from src.worker import DEFAULT_CATEGORIES, NeedTreeSizeException, logger
 from src.worker.worker_args import get_args
-from src.worker.worker_base_models import CertCompareModel, WorkerArgs, CategoryThreadInfo, ThreadInfo
+from src.worker.worker_base_models import CertCompareModel, WorkerArgs, CategoryThreadInfo, ThreadInfo, RetryStats
 from src.worker.worker_common_funcs import stop_events, get_stop_event, sleep_with_stop_check, register_stop_event, \
     wait_for_manager_api_ready
 from src.worker.worker_console import update_console_screen, update_console_message
@@ -76,10 +76,7 @@ def worker_job_thread(
     overdue = False
 
     # Add retry statistics tracking
-    retry_stats = {
-        'total_retries': 0,
-        'max_retry_after': 0
-    }
+    retry_stats = RetryStats()
 
     need_tree_size = False
 
@@ -130,7 +127,7 @@ def worker_job_thread(
                 logger.warning(f"[WARN] Entries were empty 10 times in a row: category={category} log_name={log_name} current={current} end={end}")
                 failed_sleep_sec = send_failed(args, log_name, ct_log_url, task, end, current,
                                                last_uploaded_index, worker_jp_count, worker_total_count,
-                                               retry_stats['max_retry_after'], retry_stats['total_retries'])
+                                               retry_stats.max_retry_after, retry_stats.total_retries)
                 sleep_with_stop_check(failed_sleep_sec, my_stop_event)
                 break
             if not entries:
@@ -141,7 +138,7 @@ def worker_job_thread(
                     args, category, log_name, ct_log_url, task, end, current, last_uploaded_index,
                     worker_jp_count, worker_total_count, last_ping_time, status="running",
                     default_ping_seconds=ping_interval_sec, default_ctlog_request_interval_sec=ctlog_request_interval_sec,
-                    max_retry_after=retry_stats['max_retry_after'], total_retries=retry_stats['total_retries']
+                    max_retry_after=retry_stats.max_retry_after, total_retries=retry_stats.total_retries
                 )
 
                 # exponential backoff with max 60 seconds
