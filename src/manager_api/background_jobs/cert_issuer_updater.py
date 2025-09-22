@@ -9,7 +9,7 @@ from src.share.logger import logger
 from src.share.cert_parser import JPCertificateParser
 
 BATCH_SIZE = 128
-SLEEP_SEC = 0.1
+SLEEP_SEC = 0.3
 PROGRESS_FILE = "cert_issuer_progress.txt"
 
 class CertIssuerUpdater:
