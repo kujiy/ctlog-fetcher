@@ -77,6 +77,8 @@ async def get_next_task(
     category: str = Query(...),
     db=Depends(get_async_session)
 ) -> NextTask | NextTaskCompleted:
+    # Sleep all workers temporarily
+    return NextTaskCompleted(message="all logs completed", sleep_sec=60 * 5)
     if not worker_name:
         worker_name = "default"  # somehow Query default doesn't work
     ip_address_hash = extract_ip_address_hash(request)
