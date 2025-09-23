@@ -51,15 +51,22 @@ class Cert2Data(BaseModel):
     """Pydantic model for certificate data returned by JPCertificateParser2."""
     
     # Basic certificate information
-    certificate_fingerprint_sha256: str = Field(..., description="SHA256 fingerprint of the certificate")
-    serial_number: str = Field(..., description="Certificate serial number")
     common_name: Optional[str] = Field(None, description="Common name from certificate subject")
     
     # Validity period
+    ct_log_timestamp: datetime = Field(..., description="CT log timestamp")
     not_before: datetime = Field(..., description="Certificate not valid before date")
     not_after: datetime = Field(..., description="Certificate not valid after date")
     
+    # CT log specific information
+    is_precertificate: bool = Field(False, description="Whether this is a precertificate")
+    vetting_level: str = Field(..., description="Certificate vetting level (dv, ov, ev)")
+    san_count: int = Field(0, description="Number of subject alternative names")
+    subject_alternative_names: str = Field(..., description="JSON string of subject alternative names")
+    serial_number: str = Field(..., description="Certificate serial number")
+
     # Public key information
+    certificate_fingerprint_sha256: str = Field(..., description="SHA256 fingerprint of the certificate")
     public_key_algorithm: Optional[str] = Field(None, description="Public key algorithm")
     key_size: Optional[int] = Field(None, description="Public key size in bits")
     signature_algorithm: Optional[str] = Field(None, description="Signature algorithm")
@@ -75,14 +82,11 @@ class Cert2Data(BaseModel):
     # Japan-specific information
     organization_type: str = Field("unknown", description="Organization type based on JP domain")
     is_wildcard: bool = Field(False, description="Whether certificate is a wildcard certificate")
-    root_ca_issuer_name: Optional[str] = Field(None, description="Root CA issuer name")
     
     # Technical information
     subject_public_key_hash: Optional[str] = Field(None, description="SHA256 hash of subject public key")
-    issuance_lag_seconds: Optional[int] = Field(None, description="Issuance lag in seconds")
-    days_before_expiry: Optional[int] = Field(None, description="Days before certificate expiry")
-    issued_after_expiry: bool = Field(False, description="Whether certificate was issued after expiry")
-    is_automated_renewal: Optional[bool] = Field(None, description="Whether certificate is automated renewal")
+    authority_key_identifier: Optional[str] = Field(None, description="Authority Key Identifier (AKI) hex string")
+    subject_key_identifier: Optional[str] = Field(None, description="Subject Key Identifier (SKI) hex string")
     
     # Issuer information
     issuer: Optional[str] = Field(None, description="Complete issuer string")
@@ -95,23 +99,17 @@ class Cert2Data(BaseModel):
     issuer_email: Optional[str] = Field(None, description="Issuer email")
     issuer_dc: Optional[str] = Field(None, description="Issuer domain component")
     
-    # Root issuer information
-    root_issuer: Optional[str] = Field(None, description="Complete root issuer string")
-    root_issuer_cn: Optional[str] = Field(None, description="Root issuer common name")
-    root_issuer_o: Optional[str] = Field(None, description="Root issuer organization")
-    root_issuer_ou: Optional[str] = Field(None, description="Root issuer organizational unit")
-    root_issuer_c: Optional[str] = Field(None, description="Root issuer country")
-    root_issuer_st: Optional[str] = Field(None, description="Root issuer state/province")
-    root_issuer_l: Optional[str] = Field(None, description="Root issuer locality")
-    root_issuer_email: Optional[str] = Field(None, description="Root issuer email")
-    root_issuer_dc: Optional[str] = Field(None, description="Root issuer domain component")
+    # Subject information
+    subject: Optional[str] = Field(None, description="Complete subject string")
+    subject_cn: Optional[str] = Field(None, description="Subject common name")
+    subject_o: Optional[str] = Field(None, description="Subject organization")
+    subject_ou: Optional[str] = Field(None, description="Subject organizational unit")
+    subject_c: Optional[str] = Field(None, description="Subject country")
+    subject_st: Optional[str] = Field(None, description="Subject state/province")
+    subject_l: Optional[str] = Field(None, description="Subject locality")
+    subject_email: Optional[str] = Field(None, description="Subject email")
+    subject_dc: Optional[str] = Field(None, description="Subject domain component")
     
-    # CT log specific information
-    ct_log_timestamp: datetime = Field(..., description="CT log timestamp")
-    subject_alternative_names: str = Field(..., description="JSON string of subject alternative names")
-    san_count: int = Field(0, description="Number of subject alternative names")
-    is_precertificate: bool = Field(False, description="Whether this is a precertificate")
-    vetting_level: str = Field(..., description="Certificate vetting level (dv, ov, ev)")
 
 
 class JPCertificateParser2:
@@ -206,6 +204,7 @@ class JPCertificateParser2:
         cert_data.update(self._extract_jp_specific_info(certificate, domains))
         cert_data.update(self._extract_technical_info(certificate))
         cert_data.update(self._extract_cert2_issuer_components(certificate))
+        cert_data.update(self._extract_cert2_subject_components(certificate))
 
         cert_data['ct_log_timestamp'] = ct_log_timestamp
         cert_data['subject_alternative_names'] = json.dumps(domains)
@@ -454,8 +453,7 @@ class JPCertificateParser2:
         """Extract Japan-specific certificate information."""
         data = {
             'organization_type': 'unknown',
-            'is_wildcard': False,
-            'root_ca_issuer_name': None
+            'is_wildcard': False
         }
 
         try:
@@ -466,9 +464,6 @@ class JPCertificateParser2:
                 if '*' in domain:
                     data['is_wildcard'] = True
                     break
-
-            # Extract root CA name (simplified - use issuer for now)
-            data['root_ca_issuer_name'] = self._get_name_attribute(certificate.issuer, NameOID.COMMON_NAME)
 
         except Exception as e:
             logger.debug(f"[_extract_jp_specific_info] Error extracting JP-specific info: {e}")
@@ -520,10 +515,8 @@ class JPCertificateParser2:
         """Extract technical information."""
         data = {
             'subject_public_key_hash': None,
-            'issuance_lag_seconds': None,
-            'days_before_expiry': None,
-            'issued_after_expiry': False,
-            'is_automated_renewal': None
+            'authority_key_identifier': None,
+            'subject_key_identifier': None
         }
 
         try:
@@ -534,6 +527,25 @@ class JPCertificateParser2:
                 format=serialization.PublicFormat.SubjectPublicKeyInfo
             )
             data['subject_public_key_hash'] = hashlib.sha256(public_key_bytes).hexdigest()
+
+            # Extract Authority Key Identifier (AKI)
+            try:
+                aki_ext = certificate.extensions.get_extension_for_oid(ExtensionOID.AUTHORITY_KEY_IDENTIFIER)
+                authority_key_id = aki_ext.value.key_identifier
+                if authority_key_id:
+                    data['authority_key_identifier'] = authority_key_id.hex().upper()
+            except x509.ExtensionNotFound:
+                pass
+
+            # Extract Subject Key Identifier (SKI)
+            try:
+                ski_ext = certificate.extensions.get_extension_for_oid(ExtensionOID.SUBJECT_KEY_IDENTIFIER)
+                subject_key_id = ski_ext.value.digest
+                if subject_key_id:
+                    data['subject_key_identifier'] = subject_key_id.hex().upper()
+            except x509.ExtensionNotFound:
+                pass
+
         except Exception as e:
             logger.debug(f"[_extract_technical_info] Error extracting technical info: {e}")
             raise
@@ -541,7 +553,7 @@ class JPCertificateParser2:
         return data
 
     def _extract_cert2_issuer_components(self, certificate) -> Dict[str, Any]:
-        """Extract issuer and root issuer components for Cert2 model."""
+        """Extract issuer components for Cert2 model."""
         data = {}
 
         # Complete issuer DN string
@@ -557,17 +569,24 @@ class JPCertificateParser2:
         data['issuer_email'] = self._get_name_attribute(certificate.issuer, NameOID.EMAIL_ADDRESS)
         data['issuer_dc'] = self._get_name_attribute(certificate.issuer, NameOID.DOMAIN_COMPONENT)
 
-        # For root issuer, we'll use the same issuer data for now
-        # In a real implementation, you might want to extract this from the certificate chain
-        data['root_issuer'] = certificate.issuer.rfc4514_string()
-        data['root_issuer_cn'] = data['issuer_cn']
-        data['root_issuer_o'] = data['issuer_o']
-        data['root_issuer_ou'] = data['issuer_ou']
-        data['root_issuer_c'] = data['issuer_c']
-        data['root_issuer_st'] = data['issuer_st']
-        data['root_issuer_l'] = data['issuer_l']
-        data['root_issuer_email'] = data['issuer_email']
-        data['root_issuer_dc'] = data['issuer_dc']
+        return data
+
+    def _extract_cert2_subject_components(self, certificate) -> Dict[str, Any]:
+        """Extract subject components for Cert2 model."""
+        data = {}
+
+        # Complete subject DN string
+        data['subject'] = certificate.subject.rfc4514_string()
+        
+        # Individual subject components
+        data['subject_cn'] = self._get_name_attribute(certificate.subject, NameOID.COMMON_NAME)
+        data['subject_o'] = self._get_name_attribute(certificate.subject, NameOID.ORGANIZATION_NAME)
+        data['subject_ou'] = self._get_name_attribute(certificate.subject, NameOID.ORGANIZATIONAL_UNIT_NAME)
+        data['subject_c'] = self._get_name_attribute(certificate.subject, NameOID.COUNTRY_NAME)
+        data['subject_st'] = self._get_name_attribute(certificate.subject, NameOID.STATE_OR_PROVINCE_NAME)
+        data['subject_l'] = self._get_name_attribute(certificate.subject, NameOID.LOCALITY_NAME)
+        data['subject_email'] = self._get_name_attribute(certificate.subject, NameOID.EMAIL_ADDRESS)
+        data['subject_dc'] = self._get_name_attribute(certificate.subject, NameOID.DOMAIN_COMPONENT)
 
         return data
 

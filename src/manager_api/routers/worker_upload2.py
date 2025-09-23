@@ -96,6 +96,8 @@ async def upload_certificates2(
             organization_type=cert_data.organization_type,
             is_wildcard=cert_data.is_wildcard,
             subject_public_key_hash=cert_data.subject_public_key_hash,
+            authority_key_identifier=cert_data.authority_key_identifier,
+            subject_key_identifier=cert_data.subject_key_identifier,
             is_precertificate=cert_data.is_precertificate,
             vetting_level=cert_data.vetting_level,
             # Issuer components
@@ -105,18 +107,20 @@ async def upload_certificates2(
             issuer_c=cert_data.issuer_c,
             issuer_st=cert_data.issuer_st,
             issuer_l=cert_data.issuer_l,
-            issuer_email=cert_data.issuer_email,
-            issuer_dc=cert_data.issuer_dc,
-            # Root issuer components
-            root_issuer=cert_data.root_issuer,
-            root_issuer_cn=cert_data.root_issuer_cn,
-            root_issuer_o=cert_data.root_issuer_o,
-            root_issuer_ou=cert_data.root_issuer_ou,
-            root_issuer_c=cert_data.root_issuer_c,
-            root_issuer_st=cert_data.root_issuer_st,
-            root_issuer_l=cert_data.root_issuer_l,
-            root_issuer_email=cert_data.root_issuer_email,
-            root_issuer_dc=cert_data.root_issuer_dc
+            # Subject components
+            subject=cert_data.subject,
+            subject_cn=cert_data.subject_cn,
+            subject_o=cert_data.subject_o,
+            subject_ou=cert_data.subject_ou,
+            subject_c=cert_data.subject_c,
+            subject_st=cert_data.subject_st,
+            subject_l=cert_data.subject_l,
+            # CT log related fields
+            log_name=item.log_name,
+            ct_index=item.ct_index,
+            worker_name=item.worker_name,
+            created_at=dt.datetime.now(),
+            ct_entry=item.ct_entry
         )
         certs_to_insert.append(cert)
 

@@ -68,29 +68,29 @@ class Cert2(Base):
     ct_log_timestamp = Column(DateTime)
     not_before = Column(DateTime)
     not_after = Column(DateTime)
-    serial_number = Column(String(256))
-    certificate_fingerprint_sha256 = Column(String(128))
-    subject_public_key_hash = Column(String(128))
-    public_key_algorithm = Column(String(64))
-    key_size = Column(Integer)
-    signature_algorithm = Column(String(128))
 
-    # Binary indicators for URL presence (converted from original URL fields)
-    has_crl_urls = Column(Integer)  # 0 or 1
-    has_ocsp_urls = Column(Integer)  # 0 or 1
+    # Complete issuer DN field (for unique index)
+    issuer = Column(String(256))
 
-    # Certificate metadata (kept from original)
+    # Certificate metadata
     vetting_level = Column(String(8))  # 'dv', 'ov', 'ev'
-    subject_alternative_names = Column(Text)  # JSON string
-    san_count = Column(Integer)
     issued_on_weekend = Column(Boolean)
     issued_at_night = Column(Boolean)
     organization_type = Column(String(32))
     is_wildcard = Column(Boolean)
     is_precertificate = Column(Boolean, default=None)
+    san_count = Column(Integer)
+    subject_alternative_names = Column(Text)  # JSON string
 
-    # Complete issuer DN field (for unique index)
-    issuer = Column(String(256))
+    # Relative fields - calculated by comparison with preceeding certificates
+    is_automated_renewal = Column(Boolean, default=None)
+    days_before_expiry = Column(Integer, default=None)
+    issued_after_expiry = Column(Boolean, default=None)
+    reuse_subject_public_key_hash = Column(Integer, default=None)  # 0 or 1, indicates if public key is reused
+
+    # Binary indicators for URL presence (converted from original URL fields)
+    has_crl_urls = Column(Integer)  # 0 or 1
+    has_ocsp_urls = Column(Integer)  # 0 or 1
 
     # Individual issuer components
     issuer_cn = Column(String(256))  # Common Name
@@ -99,21 +99,29 @@ class Cert2(Base):
     issuer_c = Column(String(64))    # Country
     issuer_st = Column(String(128))  # State/Province
     issuer_l = Column(String(128))   # Locality/City
-    issuer_email = Column(String(256))  # Email Address
-    issuer_dc = Column(String(256))  # Domain Component
 
-    # Complete root issuer DN field (for analysis)
-    root_issuer = Column(String(512))
+    # Complete subject DN field (for analysis)
+    subject = Column(String(512))
 
-    # Individual root issuer components
-    root_issuer_cn = Column(String(256))  # Common Name
-    root_issuer_o = Column(String(256))   # Organization
-    root_issuer_ou = Column(String(256))  # Organizational Unit
-    root_issuer_c = Column(String(64))    # Country
-    root_issuer_st = Column(String(128))  # State/Province
-    root_issuer_l = Column(String(128))   # Locality/City
-    root_issuer_email = Column(String(256))  # Email Address
-    root_issuer_dc = Column(String(256))  # Domain Component
+    # Individual subject components
+    subject_cn = Column(String(256))  # Common Name (same as common_name field)
+    subject_o = Column(String(256))   # Organization
+    subject_ou = Column(String(256))  # Organizational Unit
+    subject_c = Column(String(64))    # Country
+    subject_st = Column(String(128))  # State/Province
+    subject_l = Column(String(128))   # Locality/City
+
+    # Unique certificate identification fields
+    serial_number = Column(String(256))
+    certificate_fingerprint_sha256 = Column(String(128))
+    subject_public_key_hash = Column(String(128))
+    public_key_algorithm = Column(String(64))
+    key_size = Column(Integer)
+    signature_algorithm = Column(String(128))
+
+    # Technical information
+    authority_key_identifier = Column(String(128))  # Authority Key Identifier (AKI) hex string
+    subject_key_identifier = Column(String(128))   # Subject Key Identifier (SKI) hex string
 
     # CT log related fields
     log_name = Column(String(64))
