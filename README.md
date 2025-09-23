@@ -76,13 +76,13 @@ Helping with this research is easy.
 
 ## If you can use Docker
 ```shell
-$ sudo docker run -d --name ct-log-worker --restart always docker.io/kujiy/ct-worker:20250922-220351
+$ sudo docker run -d --name ct-log-worker --restart always docker.io/kujiy/ct-worker:20250923-185442
 ```
 If you give the worker a name, your name will be published on the Dashboard.
 
 ```shell
 MY_NAME=your-public-name
-sudo docker run -d --name ct-log-worker --restart always -e WORKER_NAME=$MY_NAME docker.io/kujiy/ct-worker:20250922-220351
+sudo docker run -d --name ct-log-worker --restart always -e WORKER_NAME=$MY_NAME docker.io/kujiy/ct-worker:20250923-185442
 ```
 
 ## If you want to run on Kubernetes (k8s)
@@ -105,7 +105,7 @@ spec:
     spec:
       containers:
       - name: worker
-        image: docker.io/kujiy/ct-worker:20250922-220351
+        image: docker.io/kujiy/ct-worker:20250923-185442
         restartPolicy: Always
         env:
         - name: WORKER_NAME
