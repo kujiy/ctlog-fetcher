@@ -7,6 +7,7 @@ from typing import List
 
 from fastapi import Depends, APIRouter
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.manager_api.base_models import UploadCertItem, UploadResponse
 from src.manager_api.certificate_cache import cert_cache
@@ -43,7 +44,7 @@ def is_duplicate_constraint_error(e: IntegrityError) -> bool:
 @router.post("/api/worker/upload2")
 async def upload_certificates2(
     items: List[UploadCertItem],
-    db=Depends(get_async_session)
+    db: AsyncSession = Depends(get_async_session)
 ):
     logger.debug(f"[upload_certificates2] Received {len(items)} items for upload")
     inserted = 0
