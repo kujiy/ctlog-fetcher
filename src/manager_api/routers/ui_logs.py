@@ -2,13 +2,13 @@ import datetime as dt
 from datetime import datetime, timedelta
 
 from fastapi import Depends, APIRouter
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from src.config import ETA_BASE_DATE
 from src.config import JST
 # background jobs
 from src.manager_api.db import get_async_session
-from src.manager_api.models import WorkerStatus, LogFetchProgress, LogFetchProgressHistory
+from src.manager_api.models import WorkerStatus, LogFetchProgress, LogFetchProgressHistory, Cert2
 
 router = APIRouter()
 
@@ -23,6 +23,23 @@ async def count_ip_address(db):
     result = await db.execute(stmt)
     count = result.scalar()
     return count if count is not None else 0
+
+
+async def get_cert2_approximate_count(db):
+    """
+    Get approximate row count for cert2 table from MySQL table metadata.
+    This is much faster than SELECT COUNT(*) for large tables.
+    """
+    # Query INFORMATION_SCHEMA.TABLES for approximate row count
+    sql = text(f"""
+    SELECT TABLE_ROWS 
+    FROM INFORMATION_SCHEMA.TABLES 
+    WHERE TABLE_SCHEMA = DATABASE() 
+    AND TABLE_NAME = '{Cert2.__tablename__}'
+    """)
+    result = await db.execute(sql)
+    row = result.first()
+    return row[0] if row and row[0] is not None else 0
 
 
 @router.get("/api/logs_summary")
@@ -56,7 +73,7 @@ async def get_logs_summary(db=Depends(get_async_session)):
         eta_timestamp = now_datetime.isoformat()
 
     # --- Unique .jp count ---
-    unique_jp_count = 0  #TODO
+    unique_jp_count = await get_cert2_approximate_count(db)
     ip_address_count = await count_ip_address(db)
     return {
         "total_tree_size": total_tree_size,
