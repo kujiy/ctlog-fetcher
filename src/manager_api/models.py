@@ -142,7 +142,7 @@ class Cert2(Base):
 
 
 class WorkerStatus(Base):
-    __tablename__ = 'worker_status'
+    __tablename__ = 'worker_status2'
     id = Column(Integer, primary_key=True)
     worker_name = Column(String(64))
     log_name = Column(String(64))
