@@ -7,7 +7,6 @@ from sqlalchemy import func, select
 from src.config import ETA_BASE_DATE
 from src.config import JST
 # background jobs
-from src.manager_api.background_jobs.unique_cert_counter import get_unique_cert_counter_count
 from src.manager_api.db import get_async_session
 from src.manager_api.models import WorkerStatus, LogFetchProgress, LogFetchProgressHistory
 
@@ -57,7 +56,7 @@ async def get_logs_summary(db=Depends(get_async_session)):
         eta_timestamp = now_datetime.isoformat()
 
     # --- Unique .jp count ---
-    unique_jp_count = await get_unique_cert_counter_count()
+    unique_jp_count = 0  #TODO
     ip_address_count = await count_ip_address(db)
     return {
         "total_tree_size": total_tree_size,

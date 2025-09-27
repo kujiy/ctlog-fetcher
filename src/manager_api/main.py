@@ -21,7 +21,6 @@ from .background_jobs.log_fetch_snapshot_job import start_log_fetch_snapshot_job
 from .background_jobs.pending_failure_uploader import start_pending_failure_uploader
 # background jobs
 from .background_jobs.sth_fetcher import start_sth_fetcher
-from .background_jobs.unique_cert_counter import start_unique_cert_counter
 from .background_jobs.worker_liveness import start_worker_liveness_monitor
 from .background_jobs.worker_status_aggs import start_worker_status_aggs
 from .certificate_cache import cert_cache
@@ -104,7 +103,6 @@ async def on_startup():
             app.state.background_tasks = []
             app.state.background_tasks.append(start_sth_fetcher())  # 1️⃣
             app.state.background_tasks.append(start_worker_liveness_monitor())  # 2️⃣
-            # app.state.background_tasks.append(start_unique_cert_counter())  # 3️⃣
             app.state.background_tasks.append(start_log_fetch_progress())  # 4️⃣
             app.state.background_tasks.append(start_log_fetch_snapshot_job())  # 5️⃣
             app.state.background_tasks.append(start_worker_status_aggs())  # 6️⃣

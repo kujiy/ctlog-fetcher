@@ -35,8 +35,12 @@ async def get_ctlog_request_interval_sec(db, log_name, ip_address_hash: str) -> 
 
 
 @router.post("/api/worker/ping")
-async def worker_ping(data: WorkerPingModel, request: Request, db=Depends(get_async_session)) -> PingResponse:
-    # await update_worker_status_and_summary(data, db, JobStatus.RUNNING.value, request)
+async def worker_ping(
+    data: WorkerPingModel,
+    request: Request,
+    db=Depends(get_async_session)
+) -> PingResponse:
+    await update_worker_status_and_summary(data, db, JobStatus.RUNNING.value, request)
     return PingResponse(
         ping_interval_sec=WORKER_PING_INTERVAL_SEC,
         ctlog_request_interval_sec=await get_ctlog_request_interval_sec(db, data.log_name, extract_ip_address_hash(request)),
@@ -47,12 +51,20 @@ async def worker_ping(data: WorkerPingModel, request: Request, db=Depends(get_as
 
 # completed: when a job is completed
 @router.post("/api/worker/completed")
-async def worker_completed(data: WorkerPingBaseModel, request: Request, db=Depends(get_async_session)) -> SimpleResponse:
+async def worker_completed(
+    data: WorkerPingBaseModel,
+    request: Request,
+    db=Depends(get_async_session)
+) -> SimpleResponse:
     return await update_worker_status_and_summary(data, db, JobStatus.COMPLETED.value, request)
 
 # failed: when a job is failed due to: CT Log API has corrupted data, network error, etc.
 @router.post("/api/worker/failed")
-async def worker_failed(data: WorkerPingBaseModel, request: Request, db=Depends(get_async_session)) -> FailedResponse:
+async def worker_failed(
+    data: WorkerPingBaseModel,
+    request: Request,
+    db=Depends(get_async_session)
+) -> FailedResponse:
     await update_worker_status_and_summary(data, db, JobStatus.FAILED.value, request)
     # worker should sleep this seconds before asking for a new task
     return FailedResponse(failed_sleep_sec=600)
