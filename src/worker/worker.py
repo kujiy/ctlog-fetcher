@@ -19,6 +19,7 @@ from src.worker.worker_upload import FAILED_FILE_DIR, upload_jp_certs, upload
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 import time
 import requests
+import httpx
 import threading
 import logging
 import sys
@@ -82,6 +83,21 @@ def worker_job_thread(
 
     my_stop_event = get_stop_event()
 
+    # Create httpx client with HTTP/2 support and session reuse
+    if proxies and isinstance(proxies, list):
+        proxy_url = random.choice(proxies)
+        use_proxies = proxy_url
+    else:
+        use_proxies = proxies
+
+    # Create httpx client with HTTP/2 enabled and connection pooling
+    http_client = httpx.Client(
+        http2=True,  # Force HTTP/2 usage
+        proxies=use_proxies,
+        timeout=10.0,
+        limits=httpx.Limits(max_connections=1, max_keepalive_connections=1)
+    )
+
     try:
         jp_certs_buffer: List[CertCompareModel] = []
         ping_interval_sec = 60
@@ -113,7 +129,7 @@ def worker_job_thread(
 
             try:
                 # Fetch a CT LOG API: always request up to end, but only process as many as returned
-                entries = fetch_ct_log(ct_log_url, current, end, proxies, retry_stats, my_stop_event)
+                entries = fetch_ct_log(ct_log_url, current, end, http_client, proxies, retry_stats, my_stop_event)
             except NeedTreeSizeException as e:
                 logger.info(f"[{category}] NeedTreeSizeException caught: {e}. Completing job.")
                 need_tree_size = True
@@ -193,6 +209,10 @@ def worker_job_thread(
             task=task.json(),
         )
         return None
+    finally:
+        # Close the httpx client to clean up connections
+        if 'http_client' in locals():
+            http_client.close()
 
 
     # update the status as completed

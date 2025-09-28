@@ -1,24 +1,36 @@
 import random
 
-import requests
+import httpx
 
 from src.worker import logger
 from src.worker.worker_common_funcs import sleep_with_stop_check
 from src.worker import NeedTreeSizeException
 
 
-def fetch_ct_log(ct_log_url, start, end, proxies=None, retry_stats=None, stop_event=None):
+def fetch_ct_log(ct_log_url, start, end, client=None, proxies=None, retry_stats=None, stop_event=None):
     # Google CT log API: /ct/v1/get-entries?start={start}&end={end}
     base_url = ct_log_url.rstrip('/')
     url = f"{base_url}/ct/v1/get-entries?start={start}&end={end}"
-    try:
+    
+    # Create a temporary client if none provided (fallback for backwards compatibility)
+    use_temp_client = False
+    if client is None:
         # If proxies is a list, select randomly
         if proxies and isinstance(proxies, list):
             proxy_url = random.choice(proxies)
-            use_proxies = {"http": proxy_url, "https": proxy_url}
+            use_proxies = proxy_url
         else:
             use_proxies = proxies
-        resp = requests.get(url, proxies=use_proxies, timeout=10)
+        
+        client = httpx.Client(
+            http2=True,  # Force HTTP/2
+            proxies=use_proxies,
+            timeout=10.0
+        )
+        use_temp_client = True
+    
+    try:
+        resp = client.get(url)
         # logger.debug(f"Response body: {resp.text[:200]}")
         if resp.status_code == 200:
             return resp.json().get('entries', [])
@@ -48,3 +60,7 @@ def fetch_ct_log(ct_log_url, start, end, proxies=None, retry_stats=None, stop_ev
         if isinstance(e, NeedTreeSizeException):
             raise
         return []
+    finally:
+        # Close temporary client if we created it
+        if use_temp_client and client:
+            client.close()
