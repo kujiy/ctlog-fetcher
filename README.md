@@ -25,6 +25,104 @@ flowchart LR
     W -->|Obtain certificates via HTTP request| CTLogs
     W -->|Upload only `.jp` domains| M
     M --> D
+```
+
+```mermaid
+graph TD
+    subgraph Workers
+        W1[Worker 1]
+        W2[Worker 2]
+        W3[Worker 3]
+    end
+
+    M[Manager API<br>Async + Caching]
+    DB[(MySQL Database)]
+
+    W1 --> M
+    W2 --> M
+    W3 --> M
+
+    M --> DB
+```
+
+```mermaid
+flowchart TB
+    subgraph Col1["Worker Layer"]
+        W["Worker (Certificate Collector)"]
+    end
+
+    subgraph Col2["API / Parser Layer"]
+        U["Upload API (Input Certificates)"]
+        P["Parser"]
+    end
+
+    subgraph Col3["DB / Analysis Layer"]
+        DB["Database (Certificates + Analysis Info)"]
+        AS["Analysis Script"]
+        R["Related Certificates / Relationships Analysis"]
+    end
+
+    %% Arrow flow
+    W -->|Send certificates| U
+    U -->|Forward to parser| P
+    P -->|Parse & add analysis info| DB
+    DB -->|Read for analysis| AS
+    AS -->|Link related/updated certificates| R
+```
+
+Worker Multi-Thread / Multi-Log Overview
+```mermaid
+flowchart TB
+    M["Manager Server"]
+
+    subgraph WorkerBox["Worker (Main Process)"]
+        TM["Thread Manager"]
+
+        subgraph Threads["Worker Threads"]
+            T1["Thread 1\n(Google CT Log)"]
+            T2["Thread 2\n(DigiCert CT Log)"]
+            T3["Thread 3\n(Let's Encrypt CT Log)"]
+            T4["Thread n-1\n(...)"]
+            T5["Thread n\n(...)"]
+        end
+
+        %% Each thread runs Worker State Flow
+        T1 -->|Runs| WS1["Worker State Flow"]
+        T2 -->|Runs| WS2["Worker State Flow"]
+        T3 -->|Runs| WS3["Worker State Flow"]
+        T4 -->|Runs| WS4["Worker State Flow"]
+        T5 -->|Runs| WS5["Worker State Flow"]
+
+        TM --> Threads
+    end
+
+    %% Manager controls thread scaling
+    M -->|Increase / Decrease threads| TM
+
+```
+
+Worker State Flow
+```mermaid
+flowchart TB
+    Start["Start / Idle"] 
+    Fetch["Fetch task from Manager"]
+    Exec["Execute Task"]
+    Ping["Send periodic ping"]
+    Upload["Upload certificates (threshold reached)"]
+    Error["Send error to Manager"]
+    Completed["Send completed to Manager"]
+
+    %% Flow arrows
+    Start --> Fetch
+    Fetch --> Exec
+    Exec --> Ping
+    Ping --> Exec
+    Exec --> Upload
+    Upload --> Exec
+    Exec --> Completed
+    Exec --> Error
+    Completed --> Fetch
+    Error --> Fetch
 
 ```
 ---
