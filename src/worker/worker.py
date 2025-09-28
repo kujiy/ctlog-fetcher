@@ -87,13 +87,16 @@ def worker_job_thread(
     if proxies and isinstance(proxies, list):
         proxy_url = random.choice(proxies)
         use_proxies = proxy_url
+    elif proxies:
+        # Convert from requests format {"http": "...", "https": "..."} to httpx format
+        use_proxies = proxies.get("https") or proxies.get("http") if isinstance(proxies, dict) else proxies
     else:
-        use_proxies = proxies
+        use_proxies = None
 
     # Create httpx client with HTTP/2 enabled and connection pooling
     http_client = httpx.Client(
         http2=True,  # Force HTTP/2 usage
-        proxies=use_proxies,
+        proxy=use_proxies,  # httpx uses 'proxy' not 'proxies'
         timeout=10.0,
         limits=httpx.Limits(max_connections=1, max_keepalive_connections=1)
     )
