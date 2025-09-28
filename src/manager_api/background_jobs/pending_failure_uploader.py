@@ -8,8 +8,8 @@ import aiohttp
 from src.config import MANAGER_API_URL
 from src.share.logger import logger
 
-# 10 minutes interval for pending failure upload
-PENDING_FAILURE_UPLOAD_INTERVAL_SEC = 60 * 10
+# n minutes interval for pending failure upload
+PENDING_FAILURE_UPLOAD_INTERVAL_SEC = 60 * 1
 
 async def upload_pending_failure_file(file_path: str, api_url: str) -> bool:
     """

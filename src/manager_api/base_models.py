@@ -68,7 +68,6 @@ class UploadCertItem(BaseModel):
     log_name: str = Field(..., min_length=1, max_length=64)
     worker_name: str = Field("default", min_length=1, max_length=64)
     ct_index: Optional[int]
-    ip_address: Optional[str] = Field(None, max_length=64)
 
     @validator('ct_entry')
     def validate_json(cls, v):
