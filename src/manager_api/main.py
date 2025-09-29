@@ -27,9 +27,9 @@ from .certificate_cache import cert_cache
 from .db import init_engine
 from .metrics import LatencySamplingMiddleware
 from ..config import BACKGROUND_JOBS_ENABLED
+from ..share.logger import logger
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
-logger = app.logger = logging.getLogger("manager_api")
 app.add_middleware(LatencySamplingMiddleware)
 app.include_router(ui_status_router)
 app.include_router(ui_individuals_router)
@@ -94,12 +94,16 @@ async def on_startup():
     # Delayed initialization of DB engine
     init_engine()
     if BACKGROUND_JOBS_ENABLED:
-        import fcntl
+        from filelock import FileLock, Timeout
+        import random, time
         lock_file_path = "/tmp/ct_background_jobs.lock"
+        lock = FileLock(lock_file_path)
         try:
-            lock_file = open(lock_file_path, 'w')
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            logger.warning(f"✅ Acquired background jobs lock ({lock_file_path}). Starting background jobs...")
+            # reduce conflicts by random sleep before acquiring the lock
+            sleep_sec = random.uniform(0, 3)
+            time.sleep(sleep_sec)
+            lock.acquire(timeout=0.1)
+
             app.state.background_tasks = []
             app.state.background_tasks.append(start_sth_fetcher())  # 1️⃣
             app.state.background_tasks.append(start_worker_liveness_monitor())  # 2️⃣
@@ -108,13 +112,9 @@ async def on_startup():
             app.state.background_tasks.append(start_worker_status_aggs())  # 6️⃣
             app.state.background_tasks.append(start_pending_failure_uploader())  # 7️⃣
             logger.info("✅ Background jobs started and tasks stored in app.state.background_tasks")
-            app.state.background_jobs_lock_file = lock_file
-        except (IOError, OSError):
+            app.state.background_jobs_lock = lock
+        except Timeout:
             logger.warning(f"▶️ Background jobs already running in another process (lock file: {lock_file_path})")
-            try:
-                lock_file.close()
-            except:
-                pass
 
 @app.on_event("shutdown")
 async def on_shutdown():
@@ -124,6 +124,13 @@ async def on_shutdown():
             t.cancel()
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
+    # Release filelock if held
+    lock = getattr(app.state, "background_jobs_lock", None)
+    if lock is not None:
+        try:
+            lock.release()
+        except Exception:
+            pass
     logger.info("Background jobs cancelled on shutdown")
 
 

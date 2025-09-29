@@ -52,7 +52,7 @@ async def process_pending_failures():
     """
     Process all pending failure files in the upload_failure directory.
     """
-    logger.info("7️⃣  -  process_pending_failures")
+    logger.info("  -  7️⃣  -  process_pending_failures")
 
     # Directory path for pending failures
     failure_dir = "pending/upload_failure"
