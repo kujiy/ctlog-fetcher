@@ -103,11 +103,10 @@ def upload_jp_certs(args, category, current, jp_certs: List[CertCompareModel], f
                 log_name=cert.log_name,
                 worker_name=cert.worker_name,
                 ct_index=cert.ct_index,
-                ip_address=cert.ip_address
             )
             for cert in jp_certs
         ]
-        
+
         url = f"{args.manager}/api/worker/upload2"
         try:
             resp = requests.post(url, json=[item.dict() for item in upload_items], timeout=180)

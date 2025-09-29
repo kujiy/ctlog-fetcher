@@ -212,10 +212,6 @@ def worker_job_thread(
             task=task.json(),
         )
         return None
-    finally:
-        # Close the httpx client to clean up connections
-        if 'http_client' in locals():
-            http_client.close()
 
 
     # update the status as completed
