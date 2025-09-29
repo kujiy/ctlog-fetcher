@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: worker
-        image: docker.io/kujiy/ct-worker:20250923-185442
+        image: docker.io/kujiy/ct-worker:20250929-213931
         env:
         - name: WORKER_NAME
           value: "your-public-name"
