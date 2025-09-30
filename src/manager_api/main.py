@@ -100,7 +100,7 @@ async def on_startup():
         lock = FileLock(lock_file_path)
         try:
             # reduce conflicts by random sleep before acquiring the lock
-            sleep_sec = random.uniform(0, 3)
+            sleep_sec = random.uniform(0, 1)
             time.sleep(sleep_sec)
             lock.acquire(timeout=0.1)
 

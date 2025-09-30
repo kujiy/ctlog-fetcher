@@ -65,8 +65,9 @@ async def process_pending_failures():
     # API endpoint
     api_url = f"{MANAGER_API_URL}/api/worker/upload"
 
-    # Find all JSON files in the directory
+    # Find all JSON files in the directory (excluding .processing files)
     json_files = glob.glob(os.path.join(failure_dir, "*.json"))
+    json_files = [f for f in json_files if not f.endswith('.processing')]
 
     if not json_files:
         logger.debug(f"[pending_failure_uploader] No pending failure files found in {failure_dir}")
@@ -78,11 +79,27 @@ async def process_pending_failures():
     failure_count = 0
 
     for file_path in json_files:
-        success = await upload_pending_failure_file(file_path, api_url)
-        if success:
-            success_count += 1
-        else:
+        # 1. Try to atomically rename the file to .processing to lock it
+        processing_path = file_path + ".processing"
+        try:
+            os.rename(file_path, processing_path)
+        except FileNotFoundError:
+            # Already processed by another loop/process
+            continue
+        except Exception as e:
+            logger.error(f"[pending_failure_uploader] Failed to rename {file_path} to {processing_path}: {e}")
+            continue
+        # 2. Upload and move the .processing file
+        success = await upload_pending_failure_file(processing_path, api_url)
+        if not success:
+            # If failed, try to rename back so it will be retried next time
+            try:
+                os.rename(processing_path, file_path)
+            except Exception as e:
+                logger.error(f"[pending_failure_uploader] Failed to revert {processing_path} to {file_path}: {e}")
             failure_count += 1
+        else:
+            success_count += 1
 
     logger.info(f"    -  7️⃣ [pending_failure_uploader] Processing complete: {success_count} successful, {failure_count} failed")
 
