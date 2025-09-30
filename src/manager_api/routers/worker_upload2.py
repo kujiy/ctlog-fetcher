@@ -137,7 +137,7 @@ async def upload_certificates2(
             for cert in certs_to_insert:
                 await cert_cache.add(cert.issuer, cert.serial_number, cert.certificate_fingerprint_sha256)
 
-            logger.debug(f"[upload_certificates2] Batch insert successful: {inserted} certs")
+            logger.debug(f"🐕 [upload_certificates2] Batch insert successful: {inserted} certs")
 
         except IntegrityError as e:
             # On duplicate error, process one by one
