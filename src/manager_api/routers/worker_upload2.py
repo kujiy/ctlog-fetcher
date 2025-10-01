@@ -8,7 +8,6 @@ from typing import List
 from fastapi import Depends, APIRouter
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.dialects.mysql import insert
 
 from src.manager_api.base_models import UploadCertItem, UploadResponse
 from src.manager_api.certificate_cache import cert_cache
@@ -18,6 +17,28 @@ from src.share.cert_parser2 import JPCertificateParser2
 from src.share.logger import logger
 
 router = APIRouter()
+
+
+def is_duplicate_constraint_error(e: IntegrityError) -> bool:
+    """
+    Check if IntegrityError is due to duplicate/unique constraint violation.
+    Returns True for duplicate constraint errors, False for other integrity errors.
+    """
+    error_msg = str(e).lower()
+    
+    # Check for MySQL duplicate entry error (error code 1062)
+    if "duplicate entry" in error_msg and "for key" in error_msg:
+        return True
+    
+    # Check for MySQL error code 1062 specifically
+    if "1062" in error_msg:
+        return True
+    
+    # Check for other database duplicate key patterns
+    if "unique constraint" in error_msg or "duplicate key" in error_msg:
+        return True
+    
+    return False
 
 
 @router.post("/api/worker/upload2")
@@ -31,7 +52,7 @@ async def upload_certificates2(
     parser = JPCertificateParser2()
 
     # List for batch processing
-    cert_dicts = []
+    certs_to_insert = []
 
     for item in items:
         # Extract only .jp certificates using cert_parser2
@@ -55,88 +76,91 @@ async def upload_certificates2(
             skipped_duplicates += 1
             continue  # Skip duplicates (no DB query)
 
-        # Create a dictionary that perfectly matches the fields of the Cert2 table
-        cert_dict = {
-            # Basic certificate information
-            'common_name': cert_data.common_name,
-            'ct_log_timestamp': cert_data.ct_log_timestamp,
-            'not_before': cert_data.not_before,
-            'not_after': cert_data.not_after,
-            'issuer': cert_data.issuer,
-            'vetting_level': cert_data.vetting_level,
-            'issued_on_weekend': cert_data.issued_on_weekend,
-            'issued_at_night': cert_data.issued_at_night,
-            'organization_type': cert_data.organization_type,
-            'is_wildcard': cert_data.is_wildcard,
-            'is_precertificate': cert_data.is_precertificate,
-            'san_count': cert_data.san_count,
-            'subject_alternative_names': cert_data.subject_alternative_names,
-            
-            # Relative fields (not used in cert_parser2, set to None)
-            'is_automated_renewal': None,
-            'days_before_expiry': None,
-            'issued_after_expiry': None,
-            'reuse_subject_public_key_hash': None,
-            
-            # URL indicators
-            'has_crl_urls': cert_data.has_crl_urls,
-            'has_ocsp_urls': cert_data.has_ocsp_urls,
-            
+        # Map to all fields of Cert2 model
+        cert = Cert2(
+            serial_number=serial_number,
+            issuer=issuer,
+            not_before=cert_data.not_before,
+            not_after=cert_data.not_after,
+            common_name=cert_data.common_name,
+            subject_alternative_names=cert_data.subject_alternative_names,
+            san_count=cert_data.san_count,
+            certificate_fingerprint_sha256=certificate_fingerprint_sha256,
+            public_key_algorithm=cert_data.public_key_algorithm,
+            key_size=cert_data.key_size,
+            signature_algorithm=cert_data.signature_algorithm,
+            ct_log_timestamp=cert_data.ct_log_timestamp,
+            has_crl_urls=cert_data.has_crl_urls,
+            has_ocsp_urls=cert_data.has_ocsp_urls,
+            issued_on_weekend=cert_data.issued_on_weekend,
+            issued_at_night=cert_data.issued_at_night,
+            organization_type=cert_data.organization_type,
+            is_wildcard=cert_data.is_wildcard,
+            subject_public_key_hash=cert_data.subject_public_key_hash,
+            authority_key_identifier=cert_data.authority_key_identifier,
+            subject_key_identifier=cert_data.subject_key_identifier,
+            is_precertificate=cert_data.is_precertificate,
+            vetting_level=cert_data.vetting_level,
             # Issuer components
-            'issuer_cn': cert_data.issuer_cn,
-            'issuer_o': cert_data.issuer_o,
-            'issuer_ou': cert_data.issuer_ou,
-            'issuer_c': cert_data.issuer_c,
-            'issuer_st': cert_data.issuer_st,
-            'issuer_l': cert_data.issuer_l,
-            
+            issuer_cn=cert_data.issuer_cn,
+            issuer_o=cert_data.issuer_o,
+            issuer_ou=cert_data.issuer_ou,
+            issuer_c=cert_data.issuer_c,
+            issuer_st=cert_data.issuer_st,
+            issuer_l=cert_data.issuer_l,
             # Subject components
-            'subject': cert_data.subject,
-            'subject_cn': cert_data.subject_cn,
-            'subject_o': cert_data.subject_o,
-            'subject_ou': cert_data.subject_ou,
-            'subject_c': cert_data.subject_c,
-            'subject_st': cert_data.subject_st,
-            'subject_l': cert_data.subject_l,
-            
-            # Unique certificate identification
-            'serial_number': cert_data.serial_number,
-            'certificate_fingerprint_sha256': cert_data.certificate_fingerprint_sha256,
-            'subject_public_key_hash': cert_data.subject_public_key_hash,
-            'public_key_algorithm': cert_data.public_key_algorithm,
-            'key_size': cert_data.key_size,
-            'signature_algorithm': cert_data.signature_algorithm,
-            
-            # Technical information
-            'authority_key_identifier': cert_data.authority_key_identifier,
-            'subject_key_identifier': cert_data.subject_key_identifier,
-            
+            subject=cert_data.subject,
+            subject_cn=cert_data.subject_cn,
+            subject_o=cert_data.subject_o,
+            subject_ou=cert_data.subject_ou,
+            subject_c=cert_data.subject_c,
+            subject_st=cert_data.subject_st,
+            subject_l=cert_data.subject_l,
             # CT log related fields
-            'log_name': item.log_name,
-            'ct_index': item.ct_index,
-            'worker_name': item.worker_name,
-            'created_at': dt.datetime.now(),
-            'ct_entry': item.ct_entry
-        }
-        cert_dicts.append(cert_dict)
+            log_name=item.log_name,
+            ct_index=item.ct_index,
+            worker_name=item.worker_name,
+            created_at=dt.datetime.now(),
+            ct_entry=item.ct_entry
+        )
+        certs_to_insert.append(cert)
 
-    # Batch INSERT with INSERT IGNORE (prevents deadlocks)
-    if cert_dicts:
+    # Batch INSERT (prevent duplicates with DB constraints)
+    if certs_to_insert:
         try:
-            stmt = insert(Cert2).values(cert_dicts)
-            stmt = stmt.prefix_with('IGNORE')
-            result = await db.execute(stmt)
+            # Try batch insert
+            db.add_all(certs_to_insert)
             await db.commit()
+            inserted = len(certs_to_insert)
 
-            inserted = result.rowcount
-            skipped_duplicates += len(cert_dicts) - inserted
+            # Register successfully inserted certificates in cache
+            for cert in certs_to_insert:
+                await cert_cache.add(cert.issuer, cert.serial_number, cert.certificate_fingerprint_sha256)
 
-            # キャッシュに追加
-            for cert_dict in cert_dicts:
-                await cert_cache.add(cert_dict['issuer'], cert_dict['serial_number'], cert_dict['certificate_fingerprint_sha256'])
+            logger.debug(f"🐕 [upload_certificates2] Batch insert successful: {inserted} certs")
 
-            logger.debug(f"🐕 [upload_certificates2] INSERT IGNORE successful: inserted={inserted}, skipped={skipped_duplicates}")
-
+        except IntegrityError as e:
+            # On duplicate error, process one by one
+            logger.debug(f"[upload_certificates2] Batch insert failed due to duplicates, falling back to individual inserts. {e}")
+            await db.rollback()
+            for cert in certs_to_insert:
+                try:
+                    db.add(cert)
+                    await db.commit()
+                    inserted += 1
+                    # Register in cache only on success
+                    await cert_cache.add(cert.issuer, cert.serial_number, cert.certificate_fingerprint_sha256)
+                except IntegrityError as e:
+                    # Duplicate error (if unique index exists)
+                    await db.rollback()
+                    skipped_duplicates += 1
+                    
+                    # Only save_failed for non-duplicate constraint errors
+                    if not is_duplicate_constraint_error(e):
+                        await save_failed(e, items)
+                    
+                    # Add to cache as duplicate (for skipping next time)
+                    await cert_cache.add(cert.issuer, cert.serial_number, cert.certificate_fingerprint_sha256)
         except Exception as e:
             await save_failed(e, items)
             return UploadResponse(inserted=0, skipped_duplicates=0)
@@ -152,7 +176,7 @@ async def upload_certificates2(
     return UploadResponse(inserted=inserted, skipped_duplicates=skipped_duplicates)
 
 
-async def save_failed(e: Exception, items: List[UploadCertItem]):
+async def save_failed(e, items):
     # Save request to pending/upload_failure as JSON
     os.makedirs("pending/upload_failure", exist_ok=True)
     now = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
