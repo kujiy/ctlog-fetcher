@@ -15,6 +15,8 @@ async def test_worker_upload2_success(monkeypatch):
 
     # Mock database session
     class _DummyResult:
+        def __init__(self, rowcount=1):
+            self.rowcount = rowcount
         def scalars(self):
             class _S:
                 def first(self):
