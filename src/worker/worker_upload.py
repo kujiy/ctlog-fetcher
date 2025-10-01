@@ -112,7 +112,6 @@ def upload_jp_certs(args, category, current, jp_certs: List[CertCompareModel], f
             resp = requests.post(url, json=[item.dict() for item in upload_items], timeout=180)
             if resp.status_code == 200:
                 last_uploaded_index = current
-                logger.debug(f"Successfully uploaded {len(upload_items)} items to {url}: {resp.text}")
             else:
                 logger.warning(f"[{category}] Upload failed: {resp.status_code} {url} {resp.text}")
                 with failed_lock:
