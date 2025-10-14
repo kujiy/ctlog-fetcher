@@ -22,11 +22,15 @@ def fetch_ct_log(ct_log_url, start, end, client=None, proxies=None, retry_stats=
         else:
             use_proxies = proxies
         
-        client = httpx.Client(
-            http2=True,  # Force HTTP/2
-            proxies=use_proxies,
-            timeout=10.0
-        )
+        # httpx uses different proxy format than requests
+        client_kwargs = {
+            'http2': True,  # Force HTTP/2
+            'timeout': 10.0
+        }
+        if use_proxies:
+            client_kwargs['proxies'] = use_proxies
+        
+        client = httpx.Client(**client_kwargs)
         use_temp_client = True
     
     try:
@@ -56,7 +60,7 @@ def fetch_ct_log(ct_log_url, start, end, client=None, proxies=None, retry_stats=
             sleep_with_stop_check(5, stop_event)
             return []
     except Exception as e:
-        logger.debug(f"[CtLogFetch] fetch_ct_log exception: [{type(e).__name__}] {e} url={url} retry_stats={retry_stats.json() if retry_stats else None}")
+        logger.debug(f"[CtLogFetch] fetch_ct_log exception: [{type(e).__name__}] {e} url={url} retry_stats={retry_stats if retry_stats else None}")
         if isinstance(e, NeedTreeSizeException):
             raise
         return []

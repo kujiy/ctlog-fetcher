@@ -5,7 +5,7 @@ import sys
 import os
 import time
 import json
-from requests.exceptions import RequestException
+import httpx
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 # Import the functions we want to test
 from src.worker.worker import NeedTreeSizeException
 from src.worker.worker_ctlog import fetch_ct_log
-from src.worker.worker_ctlog import sleep_with_stop_check
+from src.worker.worker_common_funcs import sleep_with_stop_check
 
 
 class TestFetchCtLog:
@@ -30,7 +30,7 @@ class TestFetchCtLog:
         self.end = 10
         self.retry_stats = {'total_retries': 0, 'max_retry_after': 0}
 
-    @mock.patch('src.worker.worker_ctlog.requests.get')
+    @mock.patch('httpx.Client.get')
     @mock.patch('src.worker.worker_ctlog.sleep_with_stop_check')
     def test_successful_fetch(self, mock_sleep, mock_get):
         """Test successful fetch of CT log entries."""
@@ -56,7 +56,7 @@ class TestFetchCtLog:
         assert self.retry_stats['max_retry_after'] == 0
         mock_sleep.assert_not_called()
 
-    @mock.patch('src.worker.worker_ctlog.requests.get')
+    @mock.patch('httpx.Client.get')
     @mock.patch('src.worker.worker_ctlog.sleep_with_stop_check')
     def test_rate_limit_retry_with_header(self, mock_sleep, mock_get):
         """Test handling of 429 rate limit with Retry-After header."""
@@ -82,7 +82,7 @@ class TestFetchCtLog:
         assert self.retry_stats['max_retry_after'] == 10
         mock_sleep.assert_called_once_with(10, self.stop_event)
 
-    @mock.patch('src.worker.worker_ctlog.requests.get')
+    @mock.patch('httpx.Client.get')
     @mock.patch('src.worker.worker_ctlog.sleep_with_stop_check')
     def test_rate_limit_retry_without_header(self, mock_sleep, mock_get):
         """Test handling of 429 rate limit without Retry-After header."""
@@ -108,7 +108,7 @@ class TestFetchCtLog:
         assert self.retry_stats['max_retry_after'] == 5  # Default is 5 seconds
         mock_sleep.assert_called_once_with(5, self.stop_event)
 
-    @mock.patch('src.worker.worker_ctlog.requests.get')
+    @mock.patch('httpx.Client.get')
     @mock.patch('src.worker.worker_ctlog.sleep_with_stop_check')
     def test_multiple_rate_limits(self, mock_sleep, mock_get):
         """Test handling of multiple rate limits with different wait times."""
@@ -156,7 +156,7 @@ class TestFetchCtLog:
             mock.call(8, self.stop_event),
         ])
 
-    @mock.patch('src.worker.worker_ctlog.requests.get')
+    @mock.patch('httpx.Client.get')
     @mock.patch('src.worker.worker_ctlog.sleep_with_stop_check')
     def test_need_tree_size_exception(self, mock_sleep, mock_get):
         """Test handling of 'need tree size' error (400)."""
@@ -182,7 +182,7 @@ class TestFetchCtLog:
         assert self.retry_stats['max_retry_after'] == 0
         mock_sleep.assert_not_called()
 
-    @mock.patch('src.worker.worker_ctlog.requests.get')
+    @mock.patch('httpx.Client.get')
     @mock.patch('src.worker.worker_ctlog.sleep_with_stop_check')
     def test_other_error_codes(self, mock_sleep, mock_get):
         """Test handling of other error codes."""
@@ -207,12 +207,12 @@ class TestFetchCtLog:
         assert self.retry_stats['max_retry_after'] == 0
         mock_sleep.assert_called_once_with(5, self.stop_event)
 
-    @mock.patch('src.worker.worker_ctlog.requests.get')
+    @mock.patch('httpx.Client.get')
     @mock.patch('src.worker.worker_ctlog.sleep_with_stop_check')
     def test_request_exception(self, mock_sleep, mock_get):
         """Test handling of request exceptions."""
         # Mock request exception
-        mock_get.side_effect = RequestException("Connection error")
+        mock_get.side_effect = httpx.RequestError("Connection error")
 
         # Call the function
         result = fetch_ct_log(
@@ -230,17 +230,19 @@ class TestFetchCtLog:
         assert self.retry_stats['max_retry_after'] == 0
         mock_sleep.assert_not_called()
 
-    @mock.patch('src.worker.worker_ctlog.requests.get')
-    def test_proxy_handling_single(self, mock_get):
+    @mock.patch('httpx.Client')
+    def test_proxy_handling_single(self, mock_client_class):
         """Test handling of a single proxy."""
         # Set up a single proxy
         proxy = "http://proxy.example.com:8080"
 
-        # Mock successful response
+        # Mock client instance and response
+        mock_client = mock.Mock()
         mock_response = mock.Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {'entries': []}
-        mock_get.return_value = mock_response
+        mock_client.get.return_value = mock_response
+        mock_client_class.return_value = mock_client
 
         # Call the function
         fetch_ct_log(
@@ -252,14 +254,18 @@ class TestFetchCtLog:
             stop_event=self.stop_event
         )
 
-        # Assert proxy was used correctly
-        mock_get.assert_called_once()
-        args, kwargs = mock_get.call_args
-        assert kwargs['proxies'] == proxy
+        # Assert client was created with correct proxy
+        mock_client_class.assert_called_once_with(
+            http2=True,
+            proxies=proxy,
+            timeout=10.0
+        )
+        mock_client.get.assert_called_once()
+        mock_client.close.assert_called_once()
 
-    @mock.patch('src.worker.worker.random.choice')
-    @mock.patch('src.worker.worker_ctlog.requests.get')
-    def test_proxy_handling_multiple(self, mock_get, mock_choice):
+    @mock.patch('random.choice')
+    @mock.patch('httpx.Client')
+    def test_proxy_handling_multiple(self, mock_client_class, mock_choice):
         """Test handling of multiple proxies."""
         # Set up multiple proxies
         proxies = ["http://proxy1.example.com:8080", "http://proxy2.example.com:8080"]
@@ -267,11 +273,13 @@ class TestFetchCtLog:
         # Mock random choice to return the first proxy
         mock_choice.return_value = proxies[0]
 
-        # Mock successful response
+        # Mock client instance and response
+        mock_client = mock.Mock()
         mock_response = mock.Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {'entries': []}
-        mock_get.return_value = mock_response
+        mock_client.get.return_value = mock_response
+        mock_client_class.return_value = mock_client
 
         # Call the function
         fetch_ct_log(
@@ -286,10 +294,14 @@ class TestFetchCtLog:
         # Assert random choice was called with proxies list
         mock_choice.assert_called_once_with(proxies)
 
-        # Assert selected proxy was used correctly
-        mock_get.assert_called_once()
-        args, kwargs = mock_get.call_args
-        assert kwargs['proxies'] == {"http": proxies[0], "https": proxies[0]}
+        # Assert client was created with selected proxy
+        mock_client_class.assert_called_once_with(
+            http2=True,
+            proxies=proxies[0],
+            timeout=10.0
+        )
+        mock_client.get.assert_called_once()
+        mock_client.close.assert_called_once()
 
 
 # Test for sleep_with_stop_check function
@@ -300,14 +312,14 @@ class TestSleepWithStopCheck:
         """Setup for each test method."""
         self.stop_event = threading.Event()
 
-    @mock.patch('src.worker.worker.time.sleep')
+    @mock.patch('time.sleep')
     def test_normal_sleep(self, mock_sleep):
         """Test normal sleep without interruption."""
         sleep_with_stop_check(3, self.stop_event)
         assert mock_sleep.call_count == 3
         mock_sleep.assert_called_with(1)
 
-    @mock.patch('src.worker.worker.time.sleep')
+    @mock.patch('time.sleep')
     def test_interrupted_sleep(self, mock_sleep):
         """Test sleep with interruption."""
         # Set up mock to set the stop event after the first sleep

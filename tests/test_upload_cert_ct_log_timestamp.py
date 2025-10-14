@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select
 
-from src.manager_api.models import Base, Cert
+from src.manager_api.models import Base, Cert2
 
 from src.manager_api.base_models import UploadCertItem
 from src.manager_api.routers.worker_upload import upload_certificates
@@ -41,8 +41,8 @@ async def test_upload_cert_ct_log_timestamp(monkeypatch, tmp_path):
         result = await upload_certificates(payload, db=session)
         assert result.inserted == 1
 
-        # Query the Cert table
-        stmt = select(Cert).order_by(Cert.id.desc())
+        # Query the Cert2 table
+        stmt = select(Cert2).order_by(Cert2.id.desc())
         cert_obj = (await session.execute(stmt)).scalars().first()
         assert cert_obj is not None
         print()
@@ -105,8 +105,8 @@ async def test_upload_cert_ct_log_timestamp__weekend(monkeypatch, tmp_path):
         result = await upload_certificates(payload, db=session)
         assert result.inserted == 1
 
-        # Query the Cert table
-        stmt = select(Cert).order_by(Cert.id.desc())
+        # Query the Cert2 table
+        stmt = select(Cert2).order_by(Cert2.id.desc())
         cert_obj = (await session.execute(stmt)).scalars().first()
         assert cert_obj is not None
         print()
@@ -150,8 +150,8 @@ async def test_upload_cert_ct_log_timestamp__night(monkeypatch, tmp_path):
         result = await upload_certificates(payload, db=session)
         assert result.inserted == 1
 
-        # Query the Cert table
-        stmt = select(Cert).order_by(Cert.id.desc())
+        # Query the Cert2 table
+        stmt = select(Cert2).order_by(Cert2.id.desc())
         cert_obj = (await session.execute(stmt)).scalars().first()
         assert cert_obj is not None
         print()

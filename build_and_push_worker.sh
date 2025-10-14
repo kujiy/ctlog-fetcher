@@ -1,6 +1,6 @@
 #!/bin/bash
-# build and push docker images for api, ui, worker
-# Usage: ./build_and_push_all.sh <dockerhub_user>
+# build and push docker images for worker
+# Usage: ./build_and_push_worker.sh <dockerhub_user>
 set -e
 
 # Ensure docker buildx is available

@@ -44,14 +44,6 @@ class TestParseCTEntryToCertificateData(unittest.TestCase):
         assert d is None
 
 
-
-if __name__ == '__main__':
-    # Run the tests
-    unittest.main(verbosity=2)
-
-# Pytest-style test for issuer NULL case
-import pytest
-
 def test_parse_issuer_null():
     from src.share.cert_parser import JPCertificateParser
     import json
@@ -59,5 +51,10 @@ def test_parse_issuer_null():
     with open("tests/resources/issuer/issuer_null.json", "r", encoding="utf-8") as f:
         ct_entry = json.load(f)
     result = parser.parse_ct_entry_to_certificate_data(ct_entry)
-    # issuerのCNが無い場合はissuer DN文字列が返る仕様に変更したため、DN文字列であることを確認
+    # when issuer CN is missing, the issuer DN string is returned, so we check for the DN string
     assert result.get("issuer") == 'OU=Public Certification Authority - G2,O=Chunghwa Telecom Co.\\, Ltd.,C=TW'
+
+
+if __name__ == '__main__':
+    # Run the tests
+    unittest.main(verbosity=2)
