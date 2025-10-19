@@ -82,7 +82,6 @@ class Cert2(Base):
 
     # Indexes for performance optimization
     __table_args__ = (
-        # Unique index same as UniqueCertCounter model
         Index('idx_cert2_unique', 'issuer', 'serial_number', 'certificate_fingerprint_sha256', unique=True),
         # Additional performance indexes
         Index('idx_cert2_issuer', 'issuer', mysql_length={'issuer': 100}),
@@ -165,46 +164,6 @@ class CTLogSTH(Base):
     )
 
 
-#
-# class UniqueCert(Base):
-#     __tablename__ = 'unique_certs'
-#     id = Column(Integer, primary_key=True)
-#     issuer = Column(String(256))
-#     common_name = Column(String(512))
-#     not_before = Column(DateTime)
-#     not_after = Column(DateTime)
-#     serial_number = Column(String(256))
-#     subject_alternative_names = Column(Text)
-#     certificate_fingerprint_sha256 = Column(String(128))
-#     subject_public_key_hash = Column(String(128))
-#     public_key_algorithm = Column(String(64))
-#     key_size = Column(Integer)
-#     signature_algorithm = Column(String(128))
-#     ct_log_timestamp = Column(DateTime)   # TODO: Changed to DateTime
-#     crl_urls = Column(String(2048))
-#     ocsp_urls = Column(String(2048))
-#     vetting_level = Column(String(8))
-#     san_count = Column(Integer)
-#     issued_on_weekend = Column(Boolean)
-#     issued_at_night = Column(Boolean)
-#     organization_type = Column(String(32))
-#     is_wildcard = Column(Boolean)
-#     root_ca_issuer_name = Column(String(512))
-#     is_precertificate = Column(Boolean, default=None)
-#     log_name = Column(String(64))
-#     ct_index = Column(Integer, default=None)
-#     ct_log_url = Column(String(256))
-#     worker_name = Column(String(64))
-#     created_at = Column(DateTime)
-#     ct_entry = Column(Text)
-#     inserted_at = Column(DateTime)
-#
-#     __table_args__ = (
-#         Index('idx_unique_cert_unique', 'issuer', 'serial_number', unique=True),
-#         Index('idx_unique_cert_created_at', 'created_at'),
-#         Index('idx_unique_cert_inserted_at', 'inserted_at'),
-#     )
-
 class WorkerLogStat(Base):
     __tablename__ = 'worker_log_stats'
     id = Column(Integer, primary_key=True)
@@ -265,17 +224,6 @@ class LogFetchProgressHistory(Base):
         Index('idx_log_fetch_progress_history_log_name', 'log_name'),
         Index('idx_log_fetch_progress_history_snapshot', 'snapshot_timestamp'),
     )
-
-
-# class UniqueCertCounter(Base):
-#     __tablename__ = 'unique_cert_counter'
-#     id = Column(Integer, primary_key=True)
-#     issuer = Column(String(256), nullable=True)
-#     serial_number = Column(String(256), nullable=False)
-#     certificate_fingerprint_sha256 = Column(String(128), nullable=False)
-#     __table_args__ = (
-#         Index('idx_unique_cert_counter_unique', 'issuer', 'serial_number', 'certificate_fingerprint_sha256', unique=True),
-#     )
 
 
 
