@@ -8,6 +8,7 @@ This repository is a system for distributed collection and visualization of Cert
 - `src/share/`       ... Shared logic and parsers
 
 ## Overview
+Figure 1 - Worker-Manager-Dashboard Communication Overview
 ```mermaid
 flowchart LR
     subgraph CTLogs["CT Log APIs (Public Log Servers)"]
@@ -27,6 +28,7 @@ flowchart LR
     M --> D
 ```
 
+Figure 2 -  System Architecture Design
 ```mermaid
 graph TD
     subgraph Workers
@@ -45,6 +47,8 @@ graph TD
     M --> DB
 ```
 
+
+Figure 3 - Manager Certificate Handling Flow
 ```mermaid
 flowchart TB
     subgraph Col1["Worker Layer"]
@@ -123,7 +127,6 @@ flowchart TB
     Exec --> Error
     Completed --> Fetch
     Error --> Fetch
-
 ```
 ---
 
