@@ -1,0 +1,12 @@
+[tool.flake8]
+exclude = [
+    ".git",
+    "__pycache__",
+    "venv",
+    ".venv",
+    "*.pyc",
+    ".tox",
+]
+
+[flake8]
+ignore = F824, E501, W503  
