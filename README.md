@@ -132,6 +132,7 @@ flowchart TB
 1. Start the MySQL server and create the `ct` database
 2. **Configure database connection**: Copy `src/config_secret.py.example` to `src/config_secret.py` and configure your MySQL connection URL
 3. Start manager_api (API server)
+    1. create `src/config.py`
 4. Start ui (UI server)
 5. Start `worker.py` on each worker node
 
