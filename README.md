@@ -1,6 +1,6 @@
 # CT Log Distributed Collection System - Main README
 
-This repository is a system for distributed collection and visualization of Certificate Transparency logs.
+This repository is a system for distributed collection and visualization of Certificate Transparency logs. **It corrects only the .jp domain certificates.**
 
 - `src/manager_api/` ... Collection management API (FastAPI, MySQL)
 - `src/ui/`  ... Collection status visualization UI (FastAPI + Jinja2)
@@ -246,7 +246,7 @@ Dashboard
 ${DASHBOARD_URL} in `src.config.py`
 
 ## Support
-- If you have trouble with setup or operation, please contact the developer
+- Unfortunatelly, we have no support for this library
 
 ---
 

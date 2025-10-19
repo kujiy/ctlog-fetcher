@@ -36,4 +36,4 @@ uvicorn src.ui.main:app --host 0.0.0.0 --port 1194
 
 ---
 
-If you have any issues, please contact the developer.
+Unfortunatelly, we have no support for this library

@@ -59,4 +59,4 @@ uvicorn src.manager_api.main:app --host 0.0.0.0 --port 1173
 
 ---
 
-If you have any issues, please contact the developer.
+Unfortunatelly, we have no support for this library
