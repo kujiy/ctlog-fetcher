@@ -7,6 +7,8 @@ exclude = [
     "*.pyc",
     ".tox",
 ]
-
-[flake8]
-ignore = F824, E501, W503  
+ignore = [
+    "F824",
+    "E501",
+    "W503"
+]

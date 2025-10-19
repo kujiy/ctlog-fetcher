@@ -6,7 +6,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.share.cert_parser import JPCertificateParser, VettingLevel
+from src.share.cert_parser2 import JPCertificateParser2, VettingLevel
 
 @pytest.mark.parametrize(
     "json_path,expected",
@@ -17,9 +17,9 @@ from src.share.cert_parser import JPCertificateParser, VettingLevel
     ]
 )
 def test_vetting_level(json_path, expected):
-    parser = JPCertificateParser()
+    parser = JPCertificateParser2()
     with open(json_path, "r") as f:
         ct_entry = json.load(f)
-    cert_data = parser.parse_ct_entry_to_certificate_data(ct_entry)
+    cert_data = parser.parse_ct_entry_to_cert2_data(ct_entry)
     assert cert_data is not None
-    assert cert_data["vetting_level"] == expected
+    assert cert_data.vetting_level == expected

@@ -1,10 +1,10 @@
 import unittest
-from src.share.cert_parser import JPCertificateParser
+from src.share.cert_parser2 import JPCertificateParser2
 
 class TestExtractOrgType(unittest.TestCase):
 
     def setUp(self):
-        self.parser = JPCertificateParser()
+        self.parser = JPCertificateParser2()
 
     def test_extract_org_type_prefecture(self):
         data = {'organization_type': 'unknown'}

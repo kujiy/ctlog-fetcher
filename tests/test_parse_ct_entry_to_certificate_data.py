@@ -14,7 +14,7 @@ from unittest.mock import Mock
 # Add the project root to the path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.share.cert_parser import JPCertificateParser
+from src.share.cert_parser2 import JPCertificateParser2
 
 
 class TestParseCTEntryToCertificateData(unittest.TestCase):
@@ -22,7 +22,7 @@ class TestParseCTEntryToCertificateData(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.parser = JPCertificateParser()
+        self.parser = JPCertificateParser2()
 
         # Load the specific failed entry
         self.failed_entry_file = os.path.join(
@@ -38,21 +38,21 @@ class TestParseCTEntryToCertificateData(unittest.TestCase):
             data = json.load(f)
         ct_entry = data["entry"]
         try:
-            d = self.parser.parse_ct_entry_to_certificate_data(ct_entry)
+            d = self.parser.parse_ct_entry_to_cert2_data(ct_entry)
         except Exception as e:
             print(e)
         assert d is None
 
 
 def test_parse_issuer_null():
-    from src.share.cert_parser import JPCertificateParser
+    from src.share.cert_parser2 import JPCertificateParser2
     import json
-    parser = JPCertificateParser()
+    parser = JPCertificateParser2()
     with open("tests/resources/issuer/issuer_null.json", "r", encoding="utf-8") as f:
         ct_entry = json.load(f)
-    result = parser.parse_ct_entry_to_certificate_data(ct_entry)
+    result = parser.parse_ct_entry_to_cert2_data(ct_entry)
     # when issuer CN is missing, the issuer DN string is returned, so we check for the DN string
-    assert result.get("issuer") == 'OU=Public Certification Authority - G2,O=Chunghwa Telecom Co.\\, Ltd.,C=TW'
+    assert result.issuer == 'OU=Public Certification Authority - G2,O=Chunghwa Telecom Co.\\, Ltd.,C=TW'
 
 
 if __name__ == '__main__':

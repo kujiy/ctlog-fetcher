@@ -7,56 +7,6 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 Base = declarative_base()
 
-class Cert(Base):
-    __tablename__ = 'certs'
-    id = Column(Integer, primary_key=True)
-    issuer = Column(String(256))
-    common_name = Column(String(512))
-    not_before = Column(DateTime)
-    not_after = Column(DateTime)
-    serial_number = Column(String(256))
-    subject_alternative_names = Column(Text)  # JSON string
-    certificate_fingerprint_sha256 = Column(String(128))
-    subject_public_key_hash = Column(String(128))
-    public_key_algorithm = Column(String(64))
-    key_size = Column(Integer)
-    signature_algorithm = Column(String(128))
-    ct_log_timestamp = Column(DateTime)
-    crl_urls = Column(String(2048))
-    ocsp_urls = Column(String(2048))
-    vetting_level = Column(String(8))  # 'dv', 'ov', 'ev'
-
-    san_count = Column(Integer)
-    issued_on_weekend = Column(Boolean)
-    issued_at_night = Column(Boolean)
-    organization_type = Column(String(32))
-    is_wildcard = Column(Boolean)
-    root_ca_issuer_name = Column(String(512))
-    is_precertificate = Column(Boolean, default=None)
-
-    log_name = Column(String(64))
-    ct_index = Column(BigInteger, default=None)  # index within the log
-    ct_log_url = Column(String(256))
-    worker_name = Column(String(64))
-    created_at = Column(DateTime)
-    ct_entry = Column(Text)  # Entire CT log entry as JSON string
-    # No DB-level unique constraint; uniqueness is enforced at API level
-
-    # Indexes for performance optimization
-    __table_args__ = (
-        # For unique certificate identification in /api/logs_summary (optimized for COUNT(DISTINCT issuer, serial_number))
-        Index('idx_cert_unique_optimized', 'issuer', 'serial_number'),  # TODO: delete after adding the _new one
-        Index('idx_cert_unique_optimized_new', 'issuer', 'serial_number', 'certificate_fingerprint_sha256'),
-        # For log_name filtering
-        Index('idx_cert_log_name', 'log_name'),
-        # For created_at ordering/filtering
-        Index('idx_cert_created_at', 'created_at'),
-        # Additional separate indexes for better performance on individual fields
-        Index('idx_cert_issuer', 'issuer', mysql_length={'issuer': 100}),
-        Index('idx_cert_common_name', 'common_name', mysql_length={'common_name': 100}),
-        Index('idx_cert_serial_number', 'serial_number', mysql_length={'serial_number': 100}),
-    )
-
 class Cert2(Base):
     __tablename__ = 'cert2'
 

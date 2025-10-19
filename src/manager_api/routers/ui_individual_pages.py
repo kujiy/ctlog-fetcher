@@ -1,5 +1,5 @@
 from fastapi import Depends, APIRouter
-from src.manager_api.models import Cert
+from src.manager_api.models import Cert2
 from sqlalchemy import select
 from src.manager_api.db import get_async_session
 
@@ -10,7 +10,7 @@ router = APIRouter()
 # --- Unique Certs API ---
 @router.get("/api/unique_certs")
 async def get_unique_certs(db=Depends(get_async_session)):
-    stmt = select(Cert).order_by(Cert.id.desc()).limit(100)
+    stmt = select(Cert2).order_by(Cert2.id.desc()).limit(100)
     certs = (await db.execute(stmt)).scalars().all()
 
     result = []
@@ -59,7 +59,7 @@ async def get_unique_certs(db=Depends(get_async_session)):
 # --- Fetched Certs by Worker API ---
 @router.get("/api/fetched_certs/{worker_name}")
 async def get_fetched_certs_by_worker(worker_name: str, db=Depends(get_async_session)):
-    stmt = select(Cert).where(Cert.worker_name == worker_name).order_by(Cert.id.desc()).limit(100)
+    stmt = select(Cert2).where(Cert2.worker_name == worker_name).order_by(Cert2.id.desc()).limit(100)
     certs = (await db.execute(stmt)).scalars().all()
 
     result = []
