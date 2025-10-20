@@ -67,26 +67,26 @@ jobs:
         # Create config_secret.py with test database URL
         cat > src/config_secret.py << EOF
         # Test configuration for GitHub Actions
-        MYSQL_URL = "mysql+pymysql://root:@127.0.0.1:3306/ct"
+        MYSQL_URL = "mysql+aiomysql://root:@127.0.0.1:3306/ct"
         EOF
     
     - name: Create database tables
       env:
-        MYSQL_URL: "mysql+pymysql://root:@127.0.0.1:3306/ct"
+        MYSQL_URL: "mysql+aiomysql://root:@127.0.0.1:3306/ct"
         PYTHONPATH: ${{ github.workspace }}
       run: |
         python src/manager_api/models.py
     
     - name: Run tests
       env:
-        MYSQL_URL: "mysql+pymysql://root:@127.0.0.1:3306/ct"
+        MYSQL_URL: "mysql+aiomysql://root:@127.0.0.1:3306/ct"
         PYTHONPATH: ${{ github.workspace }}
       run: |
         pytest tests/ -v --tb=short
     
     - name: Run tests with coverage (optional)
       env:
-        MYSQL_URL: "mysql+pymysql://root:@127.0.0.1:3306/ct"
+        MYSQL_URL: "mysql+aiomysql://root:@127.0.0.1:3306/ct"
         PYTHONPATH: ${{ github.workspace }}
       run: |
         pip install pytest-cov
