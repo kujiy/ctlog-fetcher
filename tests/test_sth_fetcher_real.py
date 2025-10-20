@@ -13,6 +13,7 @@ letsencrypt_targets = [
 import pytest
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 @pytest.mark.parametrize("log_name,ct_log_url", letsencrypt_targets)
 async def test_fetch_sth_no_retry_letsencrypt(log_name, ct_log_url):
     now = datetime.utcnow()

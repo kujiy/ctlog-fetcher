@@ -40,16 +40,16 @@ def test_config_import():
 async def test_database_engine_initialization():
     """Test that database engine can be initialized"""
     try:
-        from src.manager_api.db import init_engine, dispose_engines
+        from src.manager_api.db import init_engine, dispose_engines_sync
         
         # Clean up any existing engines
-        dispose_engines()
+        dispose_engines_sync()
         
         # Initialize engine
         init_engine()
         
         # Clean up
-        dispose_engines()
+        dispose_engines_sync()
         
         print("Database engine initialization test passed")
     except Exception as e:

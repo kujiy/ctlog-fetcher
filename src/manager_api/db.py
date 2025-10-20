@@ -28,14 +28,35 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
     async with _async_session() as session:
         yield session
 
-def dispose_engines():
+async def dispose_engines():
+    global _async_engine, _async_session
+    # Dispose of async engine
+    if _async_engine is not None:
+        try:
+            await _async_engine.dispose()
+        except Exception:
+            pass
+    _async_engine = None
+    _async_session = None
+
+def dispose_engines_sync():
+    """Synchronous wrapper for dispose_engines for use in non-async contexts."""
     global _async_engine, _async_session
     # Dispose of async engine
     if _async_engine is not None:
         try:
             import asyncio
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(_async_engine.dispose())
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # If loop is running, create a task
+                    asyncio.create_task(_async_engine.dispose())
+                else:
+                    # If loop is not running, run until complete
+                    loop.run_until_complete(_async_engine.dispose())
+            except RuntimeError:
+                # No event loop, create new one
+                asyncio.run(_async_engine.dispose())
         except Exception:
             pass
     _async_engine = None

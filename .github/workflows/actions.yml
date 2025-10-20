@@ -86,18 +86,21 @@ jobs:
       env:
         MYSQL_URL: "mysql+aiomysql://root:@127.0.0.1:3306/ct"
         PYTHONPATH: ${{ github.workspace }}
+        # Skip real network tests in CI environment
+        CI: "true"
       working-directory: ${{ github.workspace }}
       run: |
-        PYTHONPATH=${{ github.workspace }} pytest tests/ -v --tb=short
+        PYTHONPATH=${{ github.workspace }} pytest tests/ -v --tb=short -m "not integration"
     
     - name: Run tests with coverage (optional)
       env:
         MYSQL_URL: "mysql+aiomysql://root:@127.0.0.1:3306/ct"
         PYTHONPATH: ${{ github.workspace }}
+        CI: "true"
       working-directory: ${{ github.workspace }}
       run: |
         pip install pytest-cov
-        PYTHONPATH=${{ github.workspace }} pytest tests/ --cov=src --cov-report=xml --cov-report=term-missing
+        PYTHONPATH=${{ github.workspace }} pytest tests/ --cov=src --cov-report=xml --cov-report=term-missing -m "not integration"
     
     - name: Upload coverage to Codecov (optional)
       if: success()
