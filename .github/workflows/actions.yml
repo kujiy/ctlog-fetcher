@@ -77,6 +77,10 @@ jobs:
       run: |
         python src/manager_api/models.py
     
+    - name: Confirm tables
+      run: |
+        mysql -h 127.0.0.1 -P 3306 -u root ct -e "SHOW TABLES;"
+
     - name: Run tests
       env:
         MYSQL_URL: "mysql+aiomysql://root:@127.0.0.1:3306/ct"
