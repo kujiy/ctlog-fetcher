@@ -82,7 +82,15 @@ class Cert2(Base):
 
     # Indexes for performance optimization
     __table_args__ = (
-        Index('idx_cert2_unique', 'issuer', 'serial_number', 'certificate_fingerprint_sha256', unique=True),
+
+        Index(
+            'idx_cert2_unique',
+            'issuer',
+            'serial_number',
+            'certificate_fingerprint_sha256',
+            unique=True
+        ),
+
         # Additional performance indexes
         Index('idx_cert2_issuer', 'issuer', mysql_length={'issuer': 100}),
         Index('idx_cert2_common_name', 'common_name', mysql_length={'common_name': 100}),
