@@ -1,0 +1,18 @@
+{
+  "url": "http://ctlog-fetcher.tplinkdns.com:1173/api/worker/completed",
+  "method": "POST",
+  "data": {
+    "worker_name": "kuji",
+    "log_name": "nimbus2025",
+    "ct_log_url": "https://ct.cloudflare.com/logs/nimbus2025/",
+    "start": 0,
+    "end": 15999,
+    "current": 16000,
+    "worker_total_count": 16000,
+    "last_uploaded_index": null,
+    "status": "completed",
+    "jp_count": 0,
+    "jp_ratio": 0.0,
+    "ip_address": null
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "url": "http://ctlog-fetcher.tplinkdns.com:1173/api/worker/completed",
+  "method": "POST",
+  "data": {
+    "worker_name": "chikuwa",
+    "log_name": "sphinx2025h1",
+    "ct_log_url": "https://sphinx.ct.digicert.com/2025h1/",
+    "start": 62912000,
+    "end": 62927999,
+    "current": 62928000,
+    "worker_total_count": 16000,
+    "last_uploaded_index": 62928000,
+    "status": "completed",
+    "jp_count": 42,
+    "jp_ratio": 0.002625,
+    "ip_address": null
+  }
+}
