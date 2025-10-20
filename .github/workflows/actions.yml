@@ -73,10 +73,11 @@ jobs:
     - name: Create database tables
       env:
         MYSQL_URL: "mysql+aiomysql://root:@127.0.0.1:3306/ct"
-        PYTHONPATH: .
-      working-directory: ${{ github.workspace }}
+        PYTHONPATH: /home/runner/work/ctlog-fetcher/ctlog-fetcher
+      working-directory: /home/runner/work/ctlog-fetcher/ctlog-fetcher
       run: |
-        PYTHONPATH=. python src/manager_api/models.py
+        cd /home/runner/work/ctlog-fetcher/ctlog-fetcher
+        PYTHONPATH=/home/runner/work/ctlog-fetcher/ctlog-fetcher python src/manager_api/models.py
     
     - name: Confirm tables
       run: |
@@ -85,19 +86,21 @@ jobs:
     - name: Run tests
       env:
         MYSQL_URL: "mysql+aiomysql://root:@127.0.0.1:3306/ct"
-        PYTHONPATH: .
-      working-directory: ${{ github.workspace }}
+        PYTHONPATH: /home/runner/work/ctlog-fetcher/ctlog-fetcher
+      working-directory: /home/runner/work/ctlog-fetcher/ctlog-fetcher
       run: |
-        PYTHONPATH=. pytest tests/ -v --tb=short
+        cd /home/runner/work/ctlog-fetcher/ctlog-fetcher
+        PYTHONPATH=/home/runner/work/ctlog-fetcher/ctlog-fetcher pytest tests/ -v --tb=short
     
     - name: Run tests with coverage (optional)
       env:
         MYSQL_URL: "mysql+aiomysql://root:@127.0.0.1:3306/ct"
-        PYTHONPATH: .
-      working-directory: ${{ github.workspace }}
+        PYTHONPATH: /home/runner/work/ctlog-fetcher/ctlog-fetcher
+      working-directory: /home/runner/work/ctlog-fetcher/ctlog-fetcher
       run: |
+        cd /home/runner/work/ctlog-fetcher/ctlog-fetcher
         pip install pytest-cov
-        PYTHONPATH=. pytest tests/ --cov=src --cov-report=xml --cov-report=term-missing
+        PYTHONPATH=/home/runner/work/ctlog-fetcher/ctlog-fetcher pytest tests/ --cov=src --cov-report=xml --cov-report=term-missing
     
     - name: Upload coverage to Codecov (optional)
       if: success()
